@@ -32,21 +32,19 @@ from backend.pipeline import config  # noqa: E402
 from backend.pipeline.encounters import load_encounters  # noqa: E402
 from backend.pipeline.orchestrator import run_encounter  # noqa: E402
 
-RAW_DIR = config.RESULTS_DIR / "raw"
-
-
-async def run_batch(encounters: list[dict], cheap: bool, concurrency: int) -> list[dict]:
+async def run_batch(encounters: list[dict], profile: str, concurrency: int,
+                    raw_dir: Path) -> list[dict]:
     sem = asyncio.Semaphore(concurrency)
     done = 0
 
     async def one(enc):
         nonlocal done
         async with sem:
-            record = await run_encounter(enc, cheap=cheap)
+            record = await run_encounter(enc, profile=profile)
             done += 1
             status = record.get("final", {}).get("status") if record.get("final") else record["status"]
             print(f"  [{done}/{len(encounters)}] {enc['encounter_id']}: {status}")
-            (RAW_DIR / f"{record['run_id']}.json").write_text(
+            (raw_dir / f"{record['run_id']}.json").write_text(
                 json.dumps(record, indent=2, default=str), encoding="utf-8")
             return record
 
@@ -136,6 +134,10 @@ def aggregate(records: list[dict]) -> dict:
             "input": sum(r["usage_totals"]["input_tokens"] for r in ok),
             "output": sum(r["usage_totals"]["output_tokens"] for r in ok),
         },
+        "estimated_cost_usd": {
+            "total": round(sum(r.get("estimated_cost_usd", 0) for r in ok), 4),
+            "mean_per_encounter": mean_of(lambda r: r.get("estimated_cost_usd")),
+        },
     }
 
 
@@ -180,7 +182,9 @@ def write_summary_md(summary: dict, cfg: dict) -> str:
         f"{summary['mean_tokens_per_run']['output']} out. "
         f"Mean wall time {summary['mean_total_seconds']} s.",
         f"Batch totals: {summary['total_tokens']['input']} input tokens, "
-        f"{summary['total_tokens']['output']} output tokens.",
+        f"{summary['total_tokens']['output']} output tokens, "
+        f"estimated ${summary['estimated_cost_usd']['total']} "
+        f"(prices per backend/pipeline/config.py).",
     ]
     return "\n".join(lines)
 
@@ -189,7 +193,8 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--splits", default="valid")
     parser.add_argument("--limit", type=int, default=0, help="0 means the whole split")
-    parser.add_argument("--cheap", action="store_true", help="use the cheap model tier")
+    parser.add_argument("--profile", default=config.DEFAULT_PROFILE,
+                        choices=sorted(config.PROFILES), help="per-stage model profile")
     parser.add_argument("--concurrency", type=int, default=4)
     args = parser.parse_args()
 
@@ -198,36 +203,38 @@ def main() -> int:
     if args.limit:
         encounters = encounters[: args.limit]
 
-    RAW_DIR.mkdir(parents=True, exist_ok=True)
+    out_dir = config.RESULTS_DIR / args.profile
+    raw_dir = out_dir / "raw"
+    raw_dir.mkdir(parents=True, exist_ok=True)
     cfg = {
         "splits": splits,
         "limit": args.limit,
         "n_encounters": len(encounters),
         "encounter_ids": [e["encounter_id"] for e in encounters],
-        "model_profile": "cheap" if args.cheap else "main",
-        "models": config.MODEL_CHEAP if args.cheap else config.MODEL_MAIN,
+        "profile": args.profile,
+        "models": config.PROFILES[args.profile],
         "reasoning_effort": config.REASONING_EFFORT,
         "service_date": config.SERVICE_DATE,
         "started_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
     }
     print(f"Evaluating {len(encounters)} encounters from {splits} "
-          f"with the {cfg['model_profile']} profile...")
+          f"with the {args.profile} profile {cfg['models']}...")
 
-    records = asyncio.run(run_batch(encounters, args.cheap, args.concurrency))
+    records = asyncio.run(run_batch(encounters, args.profile, args.concurrency, raw_dir))
     summary = aggregate(records)
 
-    (config.RESULTS_DIR / "eval_config.json").write_text(json.dumps(cfg, indent=2), encoding="utf-8")
-    (config.RESULTS_DIR / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
-    (config.RESULTS_DIR / "summary.md").write_text(write_summary_md(summary, cfg), encoding="utf-8")
+    (out_dir / "eval_config.json").write_text(json.dumps(cfg, indent=2), encoding="utf-8")
+    (out_dir / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
+    (out_dir / "summary.md").write_text(write_summary_md(summary, cfg), encoding="utf-8")
 
     try:
         from figures import make_eval_figures
-        make_eval_figures(summary, config.RESULTS_DIR / "figures")
+        make_eval_figures(summary, out_dir / "figures")
     except Exception as exc:
         print(f"figure generation skipped: {exc}")
 
     print(json.dumps(summary, indent=2))
-    print(f"\nWrote results to {config.RESULTS_DIR}")
+    print(f"\nWrote results to {out_dir}")
     return 0
 
 

@@ -39,10 +39,23 @@ transcript -> [1 Scribe agent] -> visit note
                  and back to 4, at most three submissions
 ```
 
-- Agents run on the OpenAI Agents SDK over the Responses API. Orchestration is
-  a plain Python loop in `backend/pipeline/orchestrator.py` because the
-  workflow order never changes; agents are used only where language
-  understanding is needed.
+- Agents run on the OpenAI Agents SDK over the Responses API, in streamed
+  mode when the UI is watching. Orchestration is a plain Python loop in
+  `backend/pipeline/orchestrator.py` because the workflow order never
+  changes; agents are used only where language understanding is needed.
+- Every agent stage is assigned a model through a profile, and the profile is
+  an experiment variable:
+
+  | profile | scribe | coder | resolver |
+  | --- | --- | --- | --- |
+  | budget | gpt-5.6-luna | gpt-5.6-luna | gpt-5.6-luna |
+  | balanced | gpt-5.6-luna | gpt-5.6-terra | gpt-5.6-terra |
+  | premium | gpt-5.6-terra | gpt-5.6-terra | gpt-5.6-sol |
+
+  At August 2026 prices (Luna $0.20/$1.20, Terra $2/$12, Sol $5/$30 per
+  million tokens in/out), a full budget-profile encounter costs well under a
+  cent. Cost estimates are computed per run from the constants in
+  `backend/pipeline/config.py`.
 - The coder must verify every diagnosis code against the free NLM Clinical
   Tables ICD-10-CM API before using it.
 - The payer is a rules engine, not an LLM. Same claim in, same verdict out.
@@ -63,7 +76,13 @@ cd frontend && npm install && npm run build && cd ..
 .venv\Scripts\python -m uvicorn backend.app:app --port 8000
 ```
 
-Open http://localhost:8000, pick an encounter, and watch the claim journey.
+Open http://localhost:8000, pick an encounter, and watch the claim journey:
+the left side is a live agent console (streaming output, tool calls against
+the NLM code table and the payer's auth portal, stage progress), the right
+side fills with the artifacts (note, codes, claim JSON, adjudication with
+CARC chips, resolver decisions, appeal letters). The "mock playback" button
+replays a scripted run through the real claim builder and payer without
+spending tokens, useful for previewing the UI.
 
 Run the tests (offline, no API key needed):
 
@@ -71,11 +90,15 @@ Run the tests (offline, no API key needed):
 .venv\Scripts\python -m pytest backend/tests -q
 ```
 
-Run the evaluation batch:
+Run a single-encounter smoke test, then the evaluation batch:
 
 ```
-.venv\Scripts\python scripts\run_eval.py --splits valid --concurrency 4
+.venv\Scripts\python scripts\smoke.py --profile budget
+.venv\Scripts\python scripts\run_eval.py --splits valid,test1 --profile budget --concurrency 4
 ```
+
+Each profile writes to its own results/<profile>/ directory so tiers can be
+compared side by side.
 
 ## Data
 

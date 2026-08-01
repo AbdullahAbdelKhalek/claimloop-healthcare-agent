@@ -62,11 +62,11 @@ def _model_settings() -> ModelSettings | None:
         return None
 
 
-def _agent(name: str, instructions: str, output_type, tools=None, cheap: bool = False) -> Agent:
+def _agent(name: str, instructions: str, output_type, model: str, tools=None) -> Agent:
     kwargs = {
         "name": name,
         "instructions": instructions,
-        "model": config.MODEL_CHEAP if cheap else config.MODEL_MAIN,
+        "model": model,
         "output_type": output_type,
     }
     if tools:
@@ -144,18 +144,18 @@ Rules:
   diff, even for an appeal (return them unchanged in that case)."""
 
 
-def build_scribe(cheap: bool = False) -> Agent:
-    return _agent("Scribe", SCRIBE_INSTRUCTIONS, EncounterNote, cheap=cheap)
+def build_scribe(model: str) -> Agent:
+    return _agent("Scribe", SCRIBE_INSTRUCTIONS, EncounterNote, model)
 
 
-def build_coder(cheap: bool = False) -> Agent:
+def build_coder(model: str) -> Agent:
     instructions = CODER_INSTRUCTIONS_TEMPLATE.format(fee_schedule=fee_schedule_text())
-    return _agent("Coder", instructions, CodingResult, tools=[search_icd10], cheap=cheap)
+    return _agent("Coder", instructions, CodingResult, model, tools=[search_icd10])
 
 
-def build_resolver(cheap: bool = False) -> Agent:
-    return _agent("DenialResolver", RESOLVER_INSTRUCTIONS, ResolutionDecision,
-                  tools=[search_icd10, request_prior_auth], cheap=cheap)
+def build_resolver(model: str) -> Agent:
+    return _agent("DenialResolver", RESOLVER_INSTRUCTIONS, ResolutionDecision, model,
+                  tools=[search_icd10, request_prior_auth])
 
 
 def resolver_input(note: EncounterNote, coding: CodingResult, claim: Claim,

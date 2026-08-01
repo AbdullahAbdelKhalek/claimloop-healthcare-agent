@@ -1,302 +1,186 @@
-import React, { useEffect, useRef, useState } from "react";
-import { getEncounters, getHealth, getRun, startRun } from "./api.js";
+import React, { useEffect, useReducer, useRef, useState } from "react";
+import { getEncounters, getHealth, startRun } from "./api.js";
+import StageRail from "./components/StageRail.jsx";
+import Console from "./components/Console.jsx";
+import { NoteCard, CodingCard, AttemptCard, FinalBanner } from "./components/Artifacts.jsx";
 
-const money = (cents) => `$${(cents / 100).toFixed(2)}`;
+const INITIAL = {
+  meta: null,
+  stages: { scribe: "idle", coder: "idle", claim: "idle", payer: "idle", resolver: "idle" },
+  blocks: [],       // console blocks, one per agent stage_started
+  note: null,
+  coding: null,
+  attempts: {},     // attempt number -> {claim, adjudication, resolution, appeal}
+  final: null,
+  usageTotals: null,
+  totalSeconds: null,
+  estimatedCost: null,
+  error: "",
+  live: false,
+};
 
-function Badge({ kind, children }) {
-  return <span className={`badge badge-${kind}`}>{children}</span>;
-}
-
-function CarcChip({ denial }) {
-  return (
-    <span className="carc" title={denial.description}>
-      CO-{denial.carc}
-      {denial.rarc ? ` / ${denial.rarc}` : ""}
-    </span>
-  );
-}
-
-function Confidence({ value }) {
-  return (
-    <span className="conf">
-      <span className="conf-bar" style={{ width: `${Math.round(value * 100)}%` }} />
-      <span className="conf-num">{value.toFixed(2)}</span>
-    </span>
-  );
-}
-
-function NoteCard({ stage }) {
-  const n = stage.note;
-  const rows = [
-    ["Chief complaint", n.chief_complaint],
-    ["HPI", n.history_of_present_illness],
-    ["Past medical history", n.past_medical_history],
-    ["Medications", n.medications],
-    ["Allergies", n.allergies],
-    ["Physical exam", n.physical_exam],
-    ["Results", n.results_review],
-    ["Follow up", n.follow_up],
-  ];
-  return (
-    <section className="card">
-      <header>
-        <h3>1. Scribe: visit note</h3>
-        <Meta stage={stage} />
-      </header>
-      <dl>
-        {rows.map(([k, v]) => (
-          <div key={k}>
-            <dt>{k}</dt>
-            <dd>{v}</dd>
-          </div>
-        ))}
-        <div>
-          <dt>Assessment and plan</dt>
-          <dd>
-            <ol>
-              {n.assessment_and_plan.map((ap, i) => (
-                <li key={i}>
-                  <strong>{ap.problem}.</strong> {ap.assessment} <em>{ap.plan}</em>
-                </li>
-              ))}
-            </ol>
-          </dd>
-        </div>
-      </dl>
-    </section>
-  );
-}
-
-function CodingCard({ stage }) {
-  const c = stage.coding;
-  return (
-    <section className="card">
-      <header>
-        <h3>2. Coder: ICD-10-CM and CPT</h3>
-        <Meta stage={stage} />
-      </header>
-      <table>
-        <thead>
-          <tr><th>#</th><th>ICD-10-CM</th><th>description</th><th>confidence</th></tr>
-        </thead>
-        <tbody>
-          {c.diagnoses.map((d, i) => (
-            <tr key={d.icd10_code + i}>
-              <td>{i + 1}</td>
-              <td><code>{d.icd10_code}</code></td>
-              <td>{d.description}<div className="rationale">{d.rationale}</div></td>
-              <td><Confidence value={d.confidence} /></td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      <table>
-        <thead>
-          <tr><th>CPT</th><th>description</th><th>dx links</th><th>confidence</th></tr>
-        </thead>
-        <tbody>
-          {c.procedures.map((p, i) => (
-            <tr key={p.cpt_code + i}>
-              <td><code>{p.cpt_code}</code></td>
-              <td>{p.description}<div className="rationale">{p.rationale}</div></td>
-              <td>{p.dx_pointers.join(", ")}</td>
-              <td><Confidence value={p.confidence} /></td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      {c.coding_notes && <p className="notes">{c.coding_notes}</p>}
-    </section>
-  );
-}
-
-function AttemptCard({ attempt }) {
-  const adj = attempt.adjudication;
-  const res = attempt.resolution;
-  const accepted = adj.status === "accepted";
-  return (
-    <section className={`card attempt ${accepted ? "ok" : "bad"}`}>
-      <header>
-        <h3>
-          Attempt {attempt.attempt}: claim <code>{attempt.claim.claim_id}</code>
-        </h3>
-        <Badge kind={accepted ? "ok" : "bad"}>{adj.status}</Badge>
-      </header>
-
-      <div className="claim-line">
-        {attempt.claim.diagnoses.length} dx, {attempt.claim.service_lines.length} lines,
-        billed {money(attempt.claim.total_charge_cents)}
-        {accepted && <> , paid <strong>{money(adj.paid_total_cents)}</strong></>}
-        {attempt.claim.resubmission_of && <> , resubmission of <code>{attempt.claim.resubmission_of}</code></>}
-      </div>
-
-      <div className="chips">
-        {attempt.claim.service_lines.map((l) => (
-          <span key={l.sequence} className="line-chip">
-            {l.cpt_code}
-            {l.prior_auth_number && <em> {l.prior_auth_number}</em>}
-          </span>
-        ))}
-      </div>
-
-      {!accepted && (
-        <ul className="remittance">
-          {adj.remittance_notes.map((r, i) => <li key={i}>{r}</li>)}
-        </ul>
-      )}
-      <div className="chips">
-        {[...adj.claim_level_denials, ...adj.line_outcomes.flatMap((lo) => lo.denials)]
-          .map((d, i) => <CarcChip key={i} denial={d} />)}
-      </div>
-
-      <details>
-        <summary>claim JSON</summary>
-        <pre>{JSON.stringify(attempt.claim, null, 2)}</pre>
-      </details>
-
-      {res && (
-        <div className="resolution">
-          <h4>
-            Denial resolver: <Badge kind="info">{res.decision.action.replaceAll("_", " ")}</Badge>
-          </h4>
-          <p>{res.decision.rationale}</p>
-          {res.decision.field_fixes.length > 0 && (
-            <p className="notes">
-              field fixes: {res.decision.field_fixes.map((f) => `${f.field}=${f.value}`).join(", ")}
-            </p>
-          )}
-          {res.decision.appeal_letter && (
-            <blockquote>{res.decision.appeal_letter}</blockquote>
-          )}
-        </div>
-      )}
-      {attempt.appeal && (
-        <div className="resolution">
-          <h4>
-            Appeal review: <Badge kind={attempt.appeal.decision === "overturned" ? "ok" : "bad"}>
-              {attempt.appeal.decision}
-            </Badge>
-          </h4>
-          <p>{attempt.appeal.explanation}</p>
-        </div>
-      )}
-    </section>
-  );
-}
-
-function Meta({ stage }) {
-  return (
-    <span className="meta">
-      {stage.seconds}s, {stage.usage.input_tokens} in / {stage.usage.output_tokens} out
-    </span>
-  );
-}
-
-function FinalBanner({ run }) {
-  const f = run.final;
-  if (!f) return null;
-  const kind = f.status === "accepted" ? "ok" : "bad";
-  return (
-    <section className={`final final-${kind}`}>
-      <strong>{f.status.toUpperCase()}</strong>
-      <span>
-        {f.first_pass_accepted
-          ? "clean claim on the first pass"
-          : f.resolved_after_denial
-            ? `denied, then recovered by the loop in ${f.attempts_used} attempts`
-            : `still ${f.status} after ${f.attempts_used} attempt(s)`}
-        {f.status === "accepted" && <> , paid {money(f.paid_total_cents)}</>}
-      </span>
-      <span className="meta">
-        {run.usage_totals.input_tokens} tokens in, {run.usage_totals.output_tokens} out,
-        {" "}{run.total_seconds}s total
-      </span>
-    </section>
-  );
+function reduce(state, ev) {
+  const s = structuredClone(state);
+  const touchAttempt = (n) => (s.attempts[n] = s.attempts[n] || { attempt: n });
+  switch (ev.type) {
+    case "reset":
+      return { ...structuredClone(INITIAL), live: true };
+    case "run_started":
+      s.meta = ev;
+      return s;
+    case "stage_started":
+      s.stages[ev.stage] = "active";
+      if (ev.stage === "resolver") { s.stages.claim = "idle"; s.stages.payer = "idle"; }
+      s.blocks.push({ stage: ev.stage, label: ev.label, model: ev.model,
+                      attempt: ev.attempt, text: "", reasoning: "", tools: [], done: false });
+      return s;
+    case "token": {
+      const b = s.blocks.findLast((x) => x.stage === ev.stage);
+      if (b) b.text += ev.delta;
+      return s;
+    }
+    case "reasoning": {
+      const b = s.blocks.findLast((x) => x.stage === ev.stage);
+      if (b) b.reasoning += ev.delta;
+      return s;
+    }
+    case "tool_call": {
+      const b = s.blocks.findLast((x) => x.stage === ev.stage);
+      if (b) b.tools.push({ name: ev.name, args: ev.args, result: null });
+      return s;
+    }
+    case "tool_result": {
+      const b = s.blocks.findLast((x) => x.stage === ev.stage);
+      const t = b && b.tools.findLast((x) => x.result === null);
+      if (t) t.result = ev.output;
+      return s;
+    }
+    case "stage_done": {
+      s.stages[ev.stage] = "done";
+      const b = s.blocks.findLast((x) => x.stage === ev.stage);
+      if (b) b.done = true;
+      if (ev.stage === "scribe") s.note = ev.artifact;
+      if (ev.stage === "coder") s.coding = ev.artifact;
+      return s;
+    }
+    case "claim_built":
+      s.stages.claim = "done";
+      s.stages.payer = "active";
+      touchAttempt(ev.attempt).claim = ev.claim;
+      return s;
+    case "adjudication": {
+      const a = touchAttempt(ev.attempt);
+      a.adjudication = ev.result;
+      s.stages.payer = ev.result.status === "accepted" ? "done" : "failed";
+      return s;
+    }
+    case "resolution": {
+      const b = s.blocks.findLast((x) => x.stage === "resolver");
+      if (b) b.done = true;
+      s.stages.resolver = "done";
+      touchAttempt(ev.attempt).resolution = ev.decision;
+      return s;
+    }
+    case "appeal":
+      touchAttempt(ev.attempt).appeal = ev.outcome;
+      return s;
+    case "run_finished":
+      s.final = ev.final;
+      s.usageTotals = ev.usage_totals;
+      s.totalSeconds = ev.total_seconds;
+      s.estimatedCost = ev.final ? ev.final.estimated_cost_usd : null;
+      s.live = false;
+      for (const k of Object.keys(s.stages)) if (s.stages[k] === "active") s.stages[k] = "done";
+      return s;
+    case "error":
+      s.error = ev.message;
+      s.live = false;
+      return s;
+    default:
+      return s;
+  }
 }
 
 export default function App() {
   const [health, setHealth] = useState(null);
   const [encounters, setEncounters] = useState([]);
   const [selected, setSelected] = useState("");
-  const [customText, setCustomText] = useState("");
   const [useCustom, setUseCustom] = useState(false);
-  const [cheap, setCheap] = useState(false);
-  const [run, setRun] = useState(null);
-  const [error, setError] = useState("");
-  const pollRef = useRef(null);
+  const [customText, setCustomText] = useState("");
+  const [profile, setProfile] = useState("budget");
+  const [state, dispatch] = useReducer(reduce, structuredClone(INITIAL));
+  const esRef = useRef(null);
 
   useEffect(() => {
-    getHealth().then(setHealth).catch((e) => setError(String(e)));
+    getHealth().then((h) => { setHealth(h); setProfile(h.default_profile); }).catch(() => {});
     getEncounters()
-      .then((rows) => {
-        setEncounters(rows);
-        if (rows.length) setSelected(rows[0].encounter_id);
-      })
+      .then((rows) => { setEncounters(rows); if (rows.length) setSelected(rows[0].encounter_id); })
       .catch(() => setEncounters([]));
-    return () => clearInterval(pollRef.current);
+    return () => esRef.current && esRef.current.close();
   }, []);
 
-  const launch = async () => {
-    setError("");
-    setRun(null);
+  const launch = async (mock = false) => {
+    dispatch({ type: "reset" });
     try {
-      const payload = useCustom
-        ? { custom_transcript: customText, cheap }
-        : { encounter_id: selected, cheap };
+      const payload = mock
+        ? { mock: true }
+        : useCustom
+          ? { custom_transcript: customText, profile }
+          : { encounter_id: selected, profile };
       const { run_id } = await startRun(payload);
-      pollRef.current = setInterval(async () => {
-        try {
-          const r = await getRun(run_id);
-          setRun(r);
-          if (r.status === "done" || r.status === "error") clearInterval(pollRef.current);
-        } catch (e) {
-          clearInterval(pollRef.current);
-          setError(String(e));
-        }
-      }, 1200);
+      if (esRef.current) esRef.current.close();
+      const es = new EventSource(`/api/runs/${run_id}/events`);
+      esRef.current = es;
+      es.onmessage = (msg) => {
+        const ev = JSON.parse(msg.data);
+        dispatch(ev);
+        if (ev.type === "run_finished" || ev.type === "error") es.close();
+      };
+      es.onerror = () => es.close();
     } catch (e) {
-      setError(String(e));
+      dispatch({ type: "error", message: String(e) });
     }
   };
 
-  const running = run && run.status === "running";
+  const attempts = Object.values(state.attempts).sort((a, b) => a.attempt - b.attempt);
+  const started = state.meta !== null || state.live;
 
   return (
     <div className="page">
       <header className="top">
-        <h1>ClaimLoop</h1>
-        <p>
-          transcript to claim to denial to resubmission, one encounter at a time.
-          A teaching demo, not a billing product.
-        </p>
+        <div className="brand">
+          <h1>Claim<span>Loop</span></h1>
+          <p>watch agents take a clinic visit from transcript to paid claim, denials included</p>
+        </div>
         {health && (
           <div className="chips">
-            <Badge kind={health.api_key_present ? "ok" : "bad"}>
+            <span className={`badge ${health.api_key_present ? "b-ok" : "b-bad"}`}>
               {health.api_key_present ? "API key loaded" : "no API key"}
-            </Badge>
-            <Badge kind={health.data_present ? "ok" : "bad"}>
+            </span>
+            <span className={`badge ${health.data_present ? "b-ok" : "b-bad"}`}>
               {health.data_present ? "data ready" : "run fetch_data.py"}
-            </Badge>
-            <Badge kind="info">{cheap ? health.models.cheap : health.models.main}</Badge>
+            </span>
           </div>
         )}
       </header>
 
-      <section className="card controls">
+      <section className="panel controls">
         <div className="row">
-          <label>
+          <label className="opt">
             <input type="radio" checked={!useCustom} onChange={() => setUseCustom(false)} />
             ACI-Bench encounter
           </label>
-          <label>
+          <label className="opt">
             <input type="radio" checked={useCustom} onChange={() => setUseCustom(true)} />
             paste a transcript
           </label>
-          <label className="right">
-            <input type="checkbox" checked={cheap} onChange={(e) => setCheap(e.target.checked)} />
-            cheap model tier
-          </label>
+          <div className="spacer" />
+          <select className="profile" value={profile} onChange={(e) => setProfile(e.target.value)}
+                  title="which model runs each agent stage">
+            <option value="budget">budget: Luna everywhere</option>
+            <option value="balanced">balanced: Luna scribe, Terra coder + resolver</option>
+            <option value="premium">premium: Terra agents, Sol resolver</option>
+          </select>
         </div>
 
         {!useCustom ? (
@@ -309,28 +193,47 @@ export default function App() {
             ))}
           </select>
         ) : (
-          <textarea
-            rows={7}
-            placeholder="[doctor] hi there, what brings you in today? [patient] ..."
-            value={customText}
-            onChange={(e) => setCustomText(e.target.value)}
-          />
+          <textarea rows={6} value={customText} onChange={(e) => setCustomText(e.target.value)}
+                    placeholder="[doctor] hi there, what brings you in today? [patient] ..." />
         )}
 
-        <button onClick={launch} disabled={running || (!useCustom && !selected)}>
-          {running ? `running: ${run.current_stage}...` : "run the claim lifecycle"}
-        </button>
-        {error && <p className="error">{error}</p>}
+        <div className="row">
+          <button className="run" onClick={() => launch(false)}
+                  disabled={state.live || (!useCustom && !selected)}>
+            {state.live ? "agents working..." : "run the claim lifecycle"}
+          </button>
+          <button className="ghost" onClick={() => launch(true)} disabled={state.live}
+                  title="scripted playback that exercises the real payer, no tokens spent">
+            mock playback
+          </button>
+        </div>
+        {state.error && <p className="error">{state.error}</p>}
       </section>
 
-      {run && run.status === "error" && (
-        <section className="card"><p className="error">{run.error}</p></section>
+      {state.meta && state.meta.mock && (
+        <div className="mockbar">
+          Mock playback for UI preview. Agent text is a fixture, no tokens were
+          spent. The claim builder and payer verdicts are the real rules engine.
+        </div>
       )}
 
-      {run && run.stages.scribe && <NoteCard stage={run.stages.scribe} />}
-      {run && run.stages.coding && <CodingCard stage={run.stages.coding} />}
-      {run && run.attempts.map((a) => <AttemptCard key={a.attempt} attempt={a} />)}
-      {run && <FinalBanner run={run} />}
+      {started && (
+        <div className="grid">
+          <div className="left">
+            <StageRail stages={state.stages} attempts={attempts.length} models={state.meta?.models} />
+            <Console blocks={state.blocks} live={state.live} />
+          </div>
+          <div className="right">
+            {state.note && <NoteCard stage={state.note} />}
+            {state.coding && <CodingCard stage={state.coding} />}
+            {attempts.map((a) => <AttemptCard key={a.attempt} attempt={a} />)}
+            {state.final && (
+              <FinalBanner final={state.final} usage={state.usageTotals}
+                           seconds={state.totalSeconds} />
+            )}
+          </div>
+        </div>
+      )}
 
       <footer>
         Portfolio demo by Abdullah Abdel-Khalek. Simulated payer, public simulated
