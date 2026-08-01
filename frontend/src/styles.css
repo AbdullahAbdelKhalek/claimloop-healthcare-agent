@@ -209,13 +209,13 @@ button.ghost:hover { color: var(--ink); border-color: var(--ink-3); }
 .tool-result { color: var(--ok); padding-left: 16px; word-break: break-word; }
 
 /* --------------------------------------------------------------- transcript */
+.transcript-card { margin-bottom: 14px; }
 .transcript-body { max-height: 300px; overflow-y: auto; border: 1px solid var(--line); border-radius: var(--r-ctl); background: var(--inset); padding: 10px 12px; }
 .turn { display: grid; grid-template-columns: 74px 1fr; gap: 10px; padding: 4px 0; }
 .turn + .turn { border-top: 1px dotted var(--line); }
 .turn .speaker { font-size: 10.5px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-3); padding-top: 2px; }
 .turn.doctor .speaker { color: var(--accent); }
 .turn .utterance { font-size: 13px; color: var(--ink); }
-.transcript-meta { color: var(--ink-3); font-size: 12px; margin-top: 6px; }
 
 /* ---------------------------------------------------------------- cards */
 .card header { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }

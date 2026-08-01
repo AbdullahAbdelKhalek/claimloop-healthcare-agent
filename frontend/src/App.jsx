@@ -124,16 +124,10 @@ function TranscriptCard({ encounter }) {
   const [open, setOpen] = useState(true);
   if (!encounter) return null;
   const turns = parseTranscript(encounter.dialogue);
-  const m = encounter.meta || {};
   return (
-    <section className="panel card">
+    <section className="panel card transcript-card">
       <header>
         <h3>Encounter transcript</h3>
-        <span className="meta">
-          {encounter.encounter_id}
-          {m.patient_firstname ? ` · ${m.patient_firstname} ${m.patient_familyname || ""}` : ""}
-          {m.cc ? ` · ${m.cc}` : ""} · {turns.length} turns
-        </span>
         <button className="ghost" onClick={() => setOpen(!open)} style={{ padding: "2px 10px" }}>
           {open ? "hide" : "show"}
         </button>
@@ -147,13 +141,6 @@ function TranscriptCard({ encounter }) {
             </div>
           ))}
         </div>
-      )}
-      {open && (
-        <p className="transcript-meta">
-          This is the raw input to the pipeline: a simulated patient and provider
-          conversation from the public ACI-Bench corpus. Everything downstream
-          is derived from this text.
-        </p>
       )}
     </section>
   );
