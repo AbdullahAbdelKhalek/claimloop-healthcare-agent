@@ -16,7 +16,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -184,7 +184,38 @@ def list_runs() -> list[dict]:
     ]
 
 
-# serve the built frontend when it exists
+# Serve the built frontend when it exists. The build output is gitignored, so
+# a fresh clone will not have it until `npm run build` has run. Rather than
+# answering a bare 404, say exactly what to do about it.
 _dist = Path(__file__).resolve().parents[1] / "frontend" / "dist"
+
 if _dist.exists():
     app.mount("/", StaticFiles(directory=_dist, html=True), name="frontend")
+else:
+    _BUILD_HINT = """<!doctype html>
+<html><head><title>ClaimLoop: frontend not built yet</title>
+<style>
+ body{font-family:system-ui,Segoe UI,sans-serif;background:#faf9f6;color:#1f2328;
+      max-width:44rem;margin:12vh auto;padding:0 1.5rem;line-height:1.6}
+ h1{font-size:1.4rem;margin-bottom:.3rem} p{color:#57606a}
+ pre{background:#fff;border:1px solid #e3e0da;border-radius:6px;padding:.9rem 1rem;
+     overflow-x:auto;font-size:.85rem}
+ code{background:#f5f3ef;border:1px solid #e3e0da;border-radius:3px;padding:0 .3rem}
+</style></head><body>
+<h1>The backend is running. The frontend has not been built yet.</h1>
+<p>The compiled interface is not checked into git, so a fresh clone has to
+build it once. From the repository root:</p>
+<pre>cd frontend
+npm install
+npm run build</pre>
+<p>Then restart this server and reload the page. The build output is picked up
+at startup, so a server started before the build will not see it.</p>
+<p>The API is already live: try <code>/api/health</code>.</p>
+</body></html>"""
+
+    @app.get("/", include_in_schema=False)
+    def frontend_missing() -> HTMLResponse:
+        return HTMLResponse(_BUILD_HINT, status_code=503)
+
+    print("\n  ClaimLoop: frontend/dist not found, serving build instructions at /."
+          "\n  Build it with:  cd frontend && npm install && npm run build\n")

@@ -134,19 +134,19 @@ The pipeline itself reads top to bottom in
 `backend/pipeline/orchestrator.py`, which is the single best file to start
 from if you want to understand the system.
 
-## Quickstart
+## Try it without an API key
 
-Prerequisites: Python 3.11 or newer, Node 18 or newer, and an OpenAI API key
-with access to the gpt-5.6 family.
+**You can run the full interface, and watch a claim get denied and recovered,
+without an OpenAI key, without the dataset, and without spending anything.**
+Four commands, about two minutes. Prerequisites are Python 3.11+ and Node 18+.
 
 <details open>
 <summary><b>macOS and Linux</b></summary>
 
 ```bash
-python3 -m venv .venv
-.venv/bin/pip install -r requirements.txt
-cp .env.example .env                      # then paste your key into .env
-.venv/bin/python scripts/fetch_data.py
+git clone https://github.com/AbdullahAbdelKhalek/claimloop-healthcare-agent.git
+cd claimloop-healthcare-agent
+python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 (cd frontend && npm install && npm run build)
 .venv/bin/python -m uvicorn backend.app:app --port 8000
 ```
@@ -156,32 +156,66 @@ cp .env.example .env                      # then paste your key into .env
 <summary><b>Windows (PowerShell)</b></summary>
 
 ```powershell
-python -m venv .venv
-.venv\Scripts\pip install -r requirements.txt
-Copy-Item .env.example .env               # then paste your key into .env
-.venv\Scripts\python scripts\fetch_data.py
+git clone https://github.com/AbdullahAbdelKhalek/claimloop-healthcare-agent.git
+cd claimloop-healthcare-agent
+python -m venv .venv; .venv\Scripts\pip install -r requirements.txt
 cd frontend; npm install; npm run build; cd ..
 .venv\Scripts\python -m uvicorn backend.app:app --port 8000
 ```
 </details>
 
-Open http://localhost:8000, pick an encounter, and watch the claim journey:
-the left side is a live agent console (streaming output, tool calls against
-the NLM code table and the payer's auth portal, stage progress), the right
-side fills with the artifacts (note, codes, claim document, adjudication with
-CARC chips, resolver decisions, appeal letters). The "mock playback" button
-replays a scripted run through the real claim builder and payer without
-spending tokens, useful for previewing the UI or demoing offline.
+Open http://localhost:8000 and press **Mock playback**. You will see the real
+interface run a real claim: the pipeline stages advancing, agent output
+streaming, tool calls to the code lookup and the payer's authorization
+portal, an MRI line denied CO-197 for a missing authorization, the resolver
+obtaining an authorization number, and the resubmission coming back accepted
+and paid. The agent text in this mode is a fixture, but the claim builder and
+every payer verdict are the real engine, so the denial and the recovery are
+genuine rule outcomes rather than a canned animation.
 
-The health badges at the top right tell you whether the key and the data were
-found, so a misconfigured setup is visible immediately rather than failing
-mid-run.
-
-Run the tests, which need neither an API key nor the dataset:
+The offline test suite needs nothing either:
 
 ```bash
 .venv/bin/python -m pytest backend/tests -q      # 15 tests, all offline
 ```
+
+## Running it for real
+
+To process actual encounters you need two more things: the dataset, which is
+free and public, and an OpenAI API key with access to the gpt-5.6 family.
+
+<details open>
+<summary><b>macOS and Linux</b></summary>
+
+```bash
+cp .env.example .env                      # then paste your key into .env
+.venv/bin/python scripts/fetch_data.py    # downloads the corpus, no account needed
+.venv/bin/python -m uvicorn backend.app:app --port 8000
+```
+</details>
+
+<details open>
+<summary><b>Windows (PowerShell)</b></summary>
+
+```powershell
+Copy-Item .env.example .env               # then paste your key into .env
+.venv\Scripts\python scripts\fetch_data.py
+.venv\Scripts\python -m uvicorn backend.app:app --port 8000
+```
+</details>
+
+Now pick an encounter from the dropdown and press **Run the claim lifecycle**.
+The transcript of the visit appears first, then the left side becomes a live
+agent console (streaming output, tool calls, stage progress) while the right
+side fills with the artifacts: the visit note, the codes with the coder's own
+confidence, the claim rendered as a claim document, the payer's verdict with
+CARC chips, and any resolver decisions or appeal letters. A single encounter
+costs well under a cent on the budget profile.
+
+The health badges at the top right report whether the key and the dataset
+were found, so a misconfigured setup is visible immediately rather than
+failing mid-run. If you start the server before building the frontend, the
+root URL explains how to build it rather than returning a bare 404.
 
 ## Reproducing the evaluation
 
