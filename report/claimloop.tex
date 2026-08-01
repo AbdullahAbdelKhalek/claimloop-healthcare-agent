@@ -34,10 +34,15 @@ payer that denies with standard CARC/RARC reason codes, and then attempts to
 recover through correction, prior authorization requests, resubmission, or a
 written appeal. Because the payer is a transparent rules engine, every denial
 is reproducible and the recovery behavior of the agent is directly measurable.
-[RESULTS-SENTENCE-PENDING: one sentence summarizing first-pass acceptance,
-recovery rate, and the denial categories that resisted automation.]
-The system is deliberately small and readable, uses no real patient data, and
-is released as open source without the underlying dataset.
+Across 60 ACI-Bench encounters, 83.3\% of first claims were accepted and the
+denial loop lifted final acceptance to 96.7\%, automatically recovering
+prior-authorization, documentation-level, and most medical-necessity denials
+at a mean cost of 0.4 cents per encounter; on the 20-encounter subset both
+tiers shared, the cheapest model tier matched a five-times-costlier tier
+exactly, while the two unrecovered claims exposed a genuine architectural
+gap, the resolver's statelessness across attempts, rather than a model
+capability gap. The system is deliberately small and readable, uses no real
+patient data, and is released as open source without the underlying dataset.
 \end{abstract}
 
 \maketitle
@@ -128,8 +133,11 @@ Encounters come from the ACI-Bench challenge split of the Microsoft clinical
 visit note summarization corpus, distributed under CC BY 4.0
 \cite{yim2023acibench}. Each record contains a full doctor-patient dialogue,
 a reference clinical note, and encounter metadata including patient name,
-age, and gender. The evaluation uses [SUBSET-PENDING: exact splits and count,
-selection documented in results/eval\_config.json] encounters. The data is
+age, and gender. The evaluation uses the two contiguous splits served by the
+demo, valid (20 encounters) and test1 (40 encounters), with no per-encounter
+selection: the budget model profile ran all 60, and the balanced profile
+reran the valid 20 for the tier comparison. The exact encounter lists are
+recorded in results/eval\_config.json per profile. The data is
 simulated by design, contains no real patient information, and is fetched at
 a pinned repository commit by a setup script rather than redistributed. Claim
 fields the corpus does not provide (member identifiers, dates of birth, the
@@ -241,14 +249,110 @@ contains no dataset text, per course rules and the corpus license.
 
 \section{Results}
 
-[RESULTS-PENDING: this section is populated from results/summary.json after
-the evaluation batch. Planned content: (1) headline outcome funnel figure,
-first-pass acceptance versus recovered versus unresolved; (2) denials by
-CARC with recovery rates, Figure denials\_by\_carc; (3) a walkthrough of one
-representative denial-recovery trajectory including the appeal letter; (4)
-note quality ROUGE table against the ACI-Bench reference notes; (5) token
-and latency table per stage and model tier; (6) failure taxonomy: which
-denial categories resisted automation and why.]
+\subsection{Workflow outcomes}
+On the budget profile (gpt-5.6-luna for all three agents), all 60 encounters
+completed. 50 claims (83.3\%) were accepted on the first submission. Of the
+10 first-pass denials, the resolution loop recovered 8 within the three-
+submission budget, lifting final acceptance to 58 of 60 (96.7\%), with a
+mean of 1.17 submissions per encounter (Figure~\ref{fig:funnel}).
+Table~\ref{tab:results} summarizes the headline numbers.
+
+\begin{table}
+  \caption{Headline results, budget profile, 60 encounters.}
+  \label{tab:results}
+  \begin{tabular}{lr}
+    \toprule
+    First-pass acceptance & 50/60 (83.3\%) \\
+    Final acceptance after loop & 58/60 (96.7\%) \\
+    Recovered by the loop & 8 of 10 denials \\
+    Appeals written (overturned) & 2 (2) \\
+    Abandoned & 1 \\
+    Mean submissions per encounter & 1.17 \\
+    Mean wall time per encounter & 32.5 s \\
+    Mean tokens per encounter (in/out) & 7{,}623 / 1{,}962 \\
+    Mean estimated cost per encounter & \$0.0039 \\
+    Whole-batch estimated cost & \$0.23 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\begin{figure}
+  \centering
+  \includegraphics[width=\columnwidth]{figures/outcome_funnel.png}
+  \caption{Claim outcomes across 60 encounters, budget profile.}
+  \label{fig:funnel}
+\end{figure}
+
+\subsection{Denial categories and recovery}
+First-attempt denials came from three rules: medical necessity (CO-50, 8
+encounters), documentation level for high evaluation-and-management codes
+(CO-150, 2), and missing prior authorization (CO-197, 2); some encounters
+triggered more than one (Figure~\ref{fig:denials}). Recovery behavior
+differed sharply by category. Both CO-197 denials were fully automated away:
+the resolver called the authorization portal tool, obtained a number, and
+resubmitted. Both CO-150 denials were fixed, one by adding a documented
+diagnosis that the coder had dropped and one by downcoding the visit. CO-50
+was the hard category: 6 of 8 were resolved, including both written appeals,
+each of which the payer's review overturned because the full documented
+diagnosis list did satisfy the policy the pointers had missed.
+
+\begin{figure}
+  \centering
+  \includegraphics[width=\columnwidth]{figures/denials_by_carc.png}
+  \caption{First-attempt denials by CARC and how many were eventually paid.}
+  \label{fig:denials}
+\end{figure}
+
+\subsection{The two failures}
+The two unrecovered encounters are the most instructive result. In encounter
+D2N102 (hematuria), the urinalysis line was denied CO-50 under the demo
+policy. The resolver repointed the line from R31.0 to N20.0; when that was
+denied too, it repointed back to R31.0, recreating the original claim, which
+the payer rejected as an exact duplicate (CO-18). The oscillation happens
+because each resolution sees only the current denial, not the attempt
+history: the architecture, not the model, lacks memory. In encounter D2N093,
+an A1c line was billed against type 1 diabetes, which the illustrative
+policy does not cover. The resolver examined the documentation, found no
+compliant fix, declined to invent one, and abandoned the line, which is the
+optimal action under the frozen rules and exactly the guardrail behavior its
+instructions demand. Both failures also expose that the demo necessity
+policy itself has coverage gaps (hematuria not qualifying for urinalysis,
+type 1 diabetes not qualifying for A1c); because the payer is deterministic,
+policy gaps and agent flaws are cleanly separable, which is precisely the
+methodological point of a transparent environment.
+
+\subsection{Model tiers: does the expensive model earn its price?}
+The balanced profile (gpt-5.6-terra coder and resolver at roughly 10 times
+Luna's token price) reran the 20 valid encounters. Within-profile headline
+rates are not comparable across different subsets, so the comparison is
+restricted to the 20 encounters both tiers ran: budget went 19/20 on first
+pass and 20/20 final; balanced went 19/20 and 20/20, identical outcomes at
+\$0.0035 versus \$0.0213 per encounter (Figure~\ref{fig:tiers}). The larger
+headline gap (83.3\% versus 95\%) reflects the harder test1 split that only
+the budget tier ran, not tier quality. On this workflow, with structured
+outputs, tool-verified codes, and a rules-based adversary, the cheapest
+frontier tier was sufficient, and the denial loop contributed far more than
+model choice: an honest, if unfashionable, applied finding.
+
+\begin{figure}
+  \centering
+  \includegraphics[width=\columnwidth]{figures/tier_comparison.png}
+  \caption{Acceptance by model tier. Bars are within-profile rates; the
+  like-for-like comparison on the shared 20-encounter subset is identical
+  for both tiers.}
+  \label{fig:tiers}
+\end{figure}
+
+\subsection{Note quality and cost}
+Scribe notes scored ROUGE-1 0.543, ROUGE-2 0.218, and ROUGE-L 0.312 against
+the ACI-Bench reference notes, in the range reported for abstractive systems
+on this corpus and essentially unchanged between tiers (both used Luna for
+the scribe). ROUGE is a weak instrument for clinical faithfulness and is
+reported only to anchor the scribe stage against the corpus's original task.
+The full 60-encounter budget evaluation consumed 457k input and 118k output
+tokens, an estimated \$0.23 total at August 2026 prices; the coder stage
+dominates token use because it carries the fee schedule and the code-lookup
+tool traffic.
 
 \section{Limitations and Ethical Considerations}
 
@@ -267,9 +371,19 @@ fine-tuned, and the dataset is not redistributed.
 
 ClaimLoop set out to test whether a small, readable stack of tool-using LLM
 agents can carry an outpatient encounter through the full claims lifecycle,
-including the part practitioners dread: the denial loop.
-[CONCLUSION-PENDING: one paragraph summarizing what the numbers showed about
-first-pass quality versus loop recovery, and the standout failure modes.]
+including the part practitioners dread: the denial loop. The answer, within
+the limits of a simulated payer, is a qualified yes: 83.3\% of claims
+cleared on the first pass, the denial loop raised final acceptance to
+96.7\%, prior-authorization and documentation denials were automated away
+entirely, and the whole 60-encounter study cost 23 cents in inference. The
+two failures were more informative than the successes: one showed a
+stateless resolver oscillating between two fixes until the duplicate-claim
+rule caught it, an architectural gap no larger model would fix, and the
+other showed the agent correctly refusing to fabricate a diagnosis to force
+a claim through. Equally practical: the cheapest model tier matched a tier
+ten times its token price on every shared encounter, evidence that in
+scaffolded, tool-verified workflows the orchestration earns more than the
+model upgrade.
 Beyond the numbers, the project argues for a methodological pattern: when
 studying agent behavior in administrative workflows, replace the opaque
 counterpart (here, the payer) with a transparent deterministic environment,

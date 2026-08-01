@@ -136,7 +136,8 @@ def aggregate(records: list[dict]) -> dict:
         },
         "estimated_cost_usd": {
             "total": round(sum(r.get("estimated_cost_usd", 0) for r in ok), 4),
-            "mean_per_encounter": mean_of(lambda r: r.get("estimated_cost_usd")),
+            "mean_per_encounter": round(statistics.mean(
+                [r.get("estimated_cost_usd", 0) for r in ok]), 4) if ok else None,
         },
     }
 

@@ -113,6 +113,29 @@ Identifiers a claim needs but the dataset does not provide (member IDs, dates
 of birth, the provider) are deterministic placeholder stubs derived from the
 encounter ID, clearly marked in `backend/pipeline/demographics.py`.
 
+## Results at a glance
+
+From the committed evaluation (60 ACI-Bench encounters end to end on the
+budget profile, August 2026):
+
+| metric | value |
+| --- | --- |
+| first-pass claim acceptance | 50/60 (83.3 percent) |
+| final acceptance after the denial loop | 58/60 (96.7 percent) |
+| prior-auth denials (CO-197) auto-recovered | 2 of 2 |
+| documentation denials (CO-150) recovered | 2 of 2 |
+| medical-necessity denials (CO-50) recovered | 6 of 8 (incl. 2 successful appeals) |
+| mean cost per encounter | $0.0039 |
+| whole study inference cost | $0.23 |
+
+On the 20 encounters both tiers ran, gpt-5.6-luna matched gpt-5.6-terra
+exactly (19/20 first pass, 20/20 final) at about a fifth of the cost. The
+two unrecovered claims are analyzed in the report: one exposes that the
+resolver has no memory across attempts (it oscillated between two diagnosis
+pointers until the duplicate rule fired), the other shows it correctly
+refusing to invent a diagnosis to force a claim through. Full numbers live
+in `results/<profile>/summary.md` and `results/comparison.md`.
+
 ## What the evaluation measures
 
 - First-pass acceptance rate and final acceptance rate after the denial loop

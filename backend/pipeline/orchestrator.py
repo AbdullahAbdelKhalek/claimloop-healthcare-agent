@@ -20,8 +20,12 @@ import openai
 from agents import Runner
 
 # API failures worth retrying; anything else is a real bug and should surface.
+# openai.APIError is the SDK base class: it covers the plain "servers are
+# currently overloaded" error the streaming path raises, and retries are
+# bounded so a genuine bad request only costs three extra attempts.
 TRANSIENT_ERRORS = (openai.RateLimitError, openai.APIConnectionError,
-                    openai.APITimeoutError, openai.InternalServerError)
+                    openai.APITimeoutError, openai.InternalServerError,
+                    openai.APIError)
 MAX_API_RETRIES = 3
 
 from . import config

@@ -1,19 +1,21 @@
 {
   "n_runs": 60,
-  "n_completed": 33,
-  "n_errors": 27,
-  "first_pass_acceptance_rate": 0.8182,
-  "final_acceptance_rate": 0.9394,
-  "resolved_after_denial": 4,
-  "denied_first_pass": 6,
-  "mean_attempts": 1.18,
+  "n_completed": 60,
+  "n_errors": 0,
+  "first_pass_acceptance_rate": 0.8333,
+  "final_acceptance_rate": 0.9667,
+  "resolved_after_denial": 8,
+  "denied_first_pass": 10,
+  "mean_attempts": 1.17,
   "denials_by_carc_first_attempt": {
-    "50": 7,
-    "150": 1
+    "50": 8,
+    "150": 2,
+    "197": 2
   },
   "fixed_by_carc": {
-    "50": 5,
-    "150": 1
+    "50": 6,
+    "150": 2,
+    "197": 2
   },
   "appeals": {
     "count": 2,
@@ -21,33 +23,33 @@
   },
   "abandoned": 1,
   "note_rouge_f": {
-    "rouge1": 0.5438,
-    "rouge2": 0.2232,
-    "rougeL": 0.3152
+    "rouge1": 0.5434,
+    "rouge2": 0.218,
+    "rougeL": 0.312
   },
   "mean_stage_metrics": {
     "scribe": {
-      "input": 1755.61,
-      "output": 765.09,
-      "seconds": 8.5
+      "input": 1736.43,
+      "output": 755.73,
+      "seconds": 8.22
     },
     "coding": {
-      "input": 4420.61,
-      "output": 1026.61,
-      "seconds": 18.62
+      "input": 4558.45,
+      "output": 1025.7,
+      "seconds": 18.56
     }
   },
-  "mean_total_seconds": 34.74,
+  "mean_total_seconds": 32.53,
   "mean_tokens_per_run": {
-    "input": 7973.03,
-    "output": 2052.39
+    "input": 7623.2,
+    "output": 1962.18
   },
   "total_tokens": {
-    "input": 263110,
-    "output": 67729
+    "input": 457392,
+    "output": 117731
   },
   "estimated_cost_usd": {
-    "total": 0.1339,
-    "mean_per_encounter": 0.0
+    "total": 0.2328,
+    "mean_per_encounter": 0.0039
   }
 }
