@@ -58,7 +58,10 @@ Industry surveys consistently place claims-related administrative transactions
 among the largest sources of avoidable spending in United States healthcare
 \cite{caqh2023}, and denial management in particular is tedious, repetitive,
 and rule-bound: precisely the shape of work that automation keeps being
-promised for.
+promised for. The stakes are not only administrative: when authorizations
+and claims stall, patients wait for care, and when denials pile up,
+providers absorb the labor. A pipeline that produces clean claims faster is
+patient-facing infrastructure as much as it is back office.
 
 Large language models look like an obvious fit, but the published evidence is
 sobering at the very first step. When models are asked to produce medical
@@ -356,16 +359,25 @@ tool traffic.
 
 \section{Limitations and Ethical Considerations}
 
-The payer is a simulation with an intentionally small rule set; real
-adjudication involves eligibility, bundling edits, timely filing, and
-payer-specific medical policies that this demo does not model. The fee
-schedule is a tiny paraphrased subset because CPT is AMA-copyrighted. The
-corpus is simulated dialogue, which is what makes an open, PHI-free demo
-possible, but it also means no claim about real-world performance is made.
-Coding correctness is not clinically validated, and the system is presented
-strictly as a research and teaching artifact, not billing advice or a
-compliance tool. No real patient data was used at any point, no model was
-fine-tuned, and the dataset is not redistributed.
+Viewed as an AI system rather than a healthcare product, the gaps are
+production-engineering gaps first. There is no human-in-the-loop review
+gate: an autonomous claim submitter is a research probe, not something
+anyone should deploy. Observability is limited to per-run JSON records
+where production would demand tracing, log aggregation, and alerting.
+There are no regression evaluations wired into continuous integration, so
+a prompt or model change could silently degrade acceptance rates. The
+resolver is stateless across attempts, which Section 4.3 shows directly
+causes one of the two failures, and there are no cost budgets, idempotency
+keys, or versioned prompts. On the domain side: the payer is a simulation
+with an intentionally small rule set; real adjudication involves
+eligibility, bundling edits, timely filing, and payer-specific medical
+policies. The fee schedule is a tiny paraphrased subset because CPT is
+AMA-copyrighted. The corpus is simulated dialogue, which is what makes an
+open, PHI-free demo possible, but it also means no claim about real-world
+performance is made. Coding correctness is not clinically validated, and
+the system is presented strictly as a research and teaching artifact, not
+billing advice or a compliance tool. No real patient data was used at any
+point, no model was fine-tuned, and the dataset is not redistributed.
 
 \section{Conclusion}
 
@@ -388,10 +400,14 @@ Beyond the numbers, the project argues for a methodological pattern: when
 studying agent behavior in administrative workflows, replace the opaque
 counterpart (here, the payer) with a transparent deterministic environment,
 and the agent's competence becomes measurable per failure category. Future
-work: richer payer policies (bundling edits, eligibility), a human-in-the-loop
-review queue, real 837/835 transaction formats, comparing model tiers and
-effort settings on recovery rate, and testing whether the resolution agent's
-appeal letters survive review by human billing professionals.
+work, in engineering order: give the resolver memory of the attempt history,
+which the oscillation failure shows is the binding constraint; put a
+human-in-the-loop review queue in front of submissions; wire regression
+evaluations into continuous integration so acceptance rates are protected
+against prompt and model drift; then richer payer policies (bundling edits,
+eligibility), real 837/835 transaction formats, and testing whether the
+resolution agent's appeal letters survive review by human billing
+professionals.
 
 \bibliographystyle{ACM-Reference-Format}
 \bibliography{claimloop}

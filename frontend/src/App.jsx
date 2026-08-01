@@ -1,5 +1,5 @@
 import React, { useEffect, useReducer, useRef, useState } from "react";
-import { getEncounters, getHealth, startRun } from "./api.js";
+import { getEncounter, getEncounters, getHealth, startRun } from "./api.js";
 import StageRail from "./components/StageRail.jsx";
 import Console from "./components/Console.jsx";
 import { NoteCard, CodingCard, AttemptCard, FinalBanner } from "./components/Artifacts.jsx";
@@ -7,14 +7,13 @@ import { NoteCard, CodingCard, AttemptCard, FinalBanner } from "./components/Art
 const INITIAL = {
   meta: null,
   stages: { scribe: "idle", coder: "idle", claim: "idle", payer: "idle", resolver: "idle" },
-  blocks: [],       // console blocks, one per agent stage_started
+  blocks: [],       // activity log blocks, one per agent stage_started
   note: null,
   coding: null,
   attempts: {},     // attempt number -> {claim, adjudication, resolution, appeal}
   final: null,
   usageTotals: null,
   totalSeconds: null,
-  estimatedCost: null,
   error: "",
   live: false,
 };
@@ -42,6 +41,11 @@ function reduce(state, ev) {
     case "reasoning": {
       const b = s.blocks.findLast((x) => x.stage === ev.stage);
       if (b) b.reasoning += ev.delta;
+      return s;
+    }
+    case "retry": {
+      const b = s.blocks.findLast((x) => x.stage === ev.stage);
+      if (b) b.tools.push({ name: "retry", args: ev.message, result: "" });
       return s;
     }
     case "tool_call": {
@@ -88,7 +92,6 @@ function reduce(state, ev) {
       s.final = ev.final;
       s.usageTotals = ev.usage_totals;
       s.totalSeconds = ev.total_seconds;
-      s.estimatedCost = ev.final ? ev.final.estimated_cost_usd : null;
       s.live = false;
       for (const k of Object.keys(s.stages)) if (s.stages[k] === "active") s.stages[k] = "done";
       return s;
@@ -101,10 +104,66 @@ function reduce(state, ev) {
   }
 }
 
+function parseTranscript(dialogue) {
+  const turns = [];
+  const re = /\[([^\]]+)\]/g;
+  let match;
+  let last = null;
+  let lastIndex = 0;
+  while ((match = re.exec(dialogue)) !== null) {
+    if (last) turns.push({ speaker: last, text: dialogue.slice(lastIndex, match.index).trim() });
+    last = match[1];
+    lastIndex = re.lastIndex;
+  }
+  if (last) turns.push({ speaker: last, text: dialogue.slice(lastIndex).trim() });
+  if (!turns.length) turns.push({ speaker: "transcript", text: dialogue });
+  return turns.filter((t) => t.text);
+}
+
+function TranscriptCard({ encounter }) {
+  const [open, setOpen] = useState(true);
+  if (!encounter) return null;
+  const turns = parseTranscript(encounter.dialogue);
+  const m = encounter.meta || {};
+  return (
+    <section className="panel card">
+      <header>
+        <h3>Encounter transcript</h3>
+        <span className="meta">
+          {encounter.encounter_id}
+          {m.patient_firstname ? ` · ${m.patient_firstname} ${m.patient_familyname || ""}` : ""}
+          {m.cc ? ` · ${m.cc}` : ""} · {turns.length} turns
+        </span>
+        <button className="ghost" onClick={() => setOpen(!open)} style={{ padding: "2px 10px" }}>
+          {open ? "hide" : "show"}
+        </button>
+      </header>
+      {open && (
+        <div className="transcript-body">
+          {turns.map((t, i) => (
+            <div key={i} className={`turn ${t.speaker.toLowerCase()}`}>
+              <span className="speaker">{t.speaker}</span>
+              <span className="utterance">{t.text}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      {open && (
+        <p className="transcript-meta">
+          This is the raw input to the pipeline: a simulated patient and provider
+          conversation from the public ACI-Bench corpus. Everything downstream
+          is derived from this text.
+        </p>
+      )}
+    </section>
+  );
+}
+
 export default function App() {
   const [health, setHealth] = useState(null);
   const [encounters, setEncounters] = useState([]);
   const [selected, setSelected] = useState("");
+  const [selectedEncounter, setSelectedEncounter] = useState(null);
   const [useCustom, setUseCustom] = useState(false);
   const [customText, setCustomText] = useState("");
   const [profile, setProfile] = useState("budget");
@@ -118,6 +177,11 @@ export default function App() {
       .catch(() => setEncounters([]));
     return () => esRef.current && esRef.current.close();
   }, []);
+
+  useEffect(() => {
+    if (!selected) return;
+    getEncounter(selected).then(setSelectedEncounter).catch(() => setSelectedEncounter(null));
+  }, [selected]);
 
   const launch = async (mock = false) => {
     dispatch({ type: "reset" });
@@ -150,7 +214,12 @@ export default function App() {
       <header className="top">
         <div className="brand">
           <h1>Claim<span>Loop</span></h1>
-          <p>watch agents take a clinic visit from transcript to paid claim, denials included</p>
+          <p>
+            A live conversation between a patient and their provider, carried by
+            agents to a clean insurance claim: the note written, the codes
+            verified, the denials answered. Faster clean claims mean patients
+            get care on time and providers get paid without the grind.
+          </p>
         </div>
         {health && (
           <div className="chips">
@@ -200,11 +269,11 @@ export default function App() {
         <div className="row">
           <button className="run" onClick={() => launch(false)}
                   disabled={state.live || (!useCustom && !selected)}>
-            {state.live ? "agents working..." : "run the claim lifecycle"}
+            {state.live ? `running: ${"agents at work"}` : "Run the claim lifecycle"}
           </button>
           <button className="ghost" onClick={() => launch(true)} disabled={state.live}
                   title="scripted playback that exercises the real payer, no tokens spent">
-            mock playback
+            Mock playback
           </button>
         </div>
         {state.error && <p className="error">{state.error}</p>}
@@ -212,9 +281,13 @@ export default function App() {
 
       {state.meta && state.meta.mock && (
         <div className="mockbar">
-          Mock playback for UI preview. Agent text is a fixture, no tokens were
-          spent. The claim builder and payer verdicts are the real rules engine.
+          Mock playback for UI preview. Agent text is a fixture and no tokens
+          were spent; the claim builder and payer verdicts are the real rules engine.
         </div>
+      )}
+
+      {!useCustom && selectedEncounter && !state.meta?.mock && (
+        <TranscriptCard encounter={selectedEncounter} />
       )}
 
       {started && (
@@ -236,8 +309,10 @@ export default function App() {
       )}
 
       <footer>
-        Portfolio demo by Abdullah Abdel-Khalek. Simulated payer, public simulated
-        dataset, no real patient data. Not medical or billing advice.
+        Built by Abdullah Abdel-Khalek to study how agent workflows can help
+        patients get timely care and help providers spend less on the claims
+        grind. Simulated payer, public simulated dataset, no real patient data.
+        Not medical or billing advice.
       </footer>
     </div>
   );

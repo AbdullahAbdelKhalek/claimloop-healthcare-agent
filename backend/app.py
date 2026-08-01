@@ -78,6 +78,16 @@ def encounters() -> list[dict]:
     return [preview(e) for e in load_encounters()]
 
 
+@app.get("/api/encounters/{encounter_id}")
+def encounter_detail(encounter_id: str) -> dict:
+    matches = [e for e in load_encounters() if e["encounter_id"] == encounter_id]
+    if not matches:
+        raise HTTPException(404, f"Unknown encounter {encounter_id}")
+    e = matches[0]
+    return {"encounter_id": e["encounter_id"], "split": e["split"],
+            "dataset": e["dataset"], "dialogue": e["dialogue"], "meta": e["meta"]}
+
+
 @app.post("/api/runs")
 async def start_run(req: RunRequest) -> dict:
     if req.mock:

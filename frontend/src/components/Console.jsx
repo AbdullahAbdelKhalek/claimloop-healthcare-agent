@@ -4,11 +4,11 @@ function ToolRow({ tool }) {
   return (
     <div className="tool">
       <span className="tool-call">
-        <span className="tool-glyph">{"⚙"}</span> {tool.name}({tool.args})
+        tool&gt; {tool.name}({tool.args})
       </span>
       {tool.result === null
         ? <span className="tool-wait">running...</span>
-        : <span className="tool-result">{"→"} {tool.result}</span>}
+        : tool.result && <span className="tool-result">{"->"} {tool.result}</span>}
     </div>
   );
 }
@@ -19,23 +19,21 @@ export default function Console({ blocks, live }) {
     endRef.current && endRef.current.scrollIntoView({ block: "nearest" });
   });
 
-  if (!blocks.length) {
-    return (
-      <section className="panel console">
-        <div className="console-empty">agent stream will appear here</div>
-      </section>
-    );
-  }
-
   return (
     <section className="panel console">
+      <p className="section-label" style={{ fontFamily: "var(--sans)" }}>Agent activity</p>
+      {!blocks.length && (
+        <div className="console-empty">
+          model output, tool calls, and retries will appear here as the agents work
+        </div>
+      )}
       {blocks.map((b, i) => {
         const isLast = i === blocks.length - 1;
         return (
           <div key={i} className={`block ${b.done ? "done" : "active"}`}>
             <div className="block-head">
               <span className={`pulse ${b.done ? "off" : ""}`} />
-              <strong>{b.label || b.stage}</strong>
+              <span>{b.label || b.stage}</span>
               {b.model && <span className="model-chip">{b.model}</span>}
             </div>
             {b.reasoning && <div className="reasoning">{b.reasoning}</div>}

@@ -1,10 +1,13 @@
 # ClaimLoop
 
 An end-to-end teaching demo of the outpatient medical claims lifecycle, run by
-LLM agents: a doctor-patient conversation goes in, and the system writes the
-visit note, suggests ICD-10-CM and CPT codes, assembles a claim, submits it to
-a simulated payer, reads the denial, and fights back through resubmission or
-appeal.
+LLM agents: a live conversation between a patient and their provider goes in,
+and the system writes the visit note, suggests ICD-10-CM and CPT codes,
+assembles a claim, submits it to a simulated payer, reads the denial, and
+fights back through resubmission or appeal. The framing matters: when this
+chain stalls, patients wait on authorizations and providers absorb the labor,
+so faster clean claims are patient-facing infrastructure as much as back
+office automation.
 
 Built as a graduate high-risk project for an AI in Healthcare course, and as a
 working answer to a question I kept hearing from people in healthcare
@@ -150,20 +153,27 @@ which this project does not have. The report is explicit about that boundary.
 
 ## Why this is not production ready
 
-This is a readable demo, on purpose. To take something like this to
-production you would need, at minimum:
+This is a readable demo, on purpose. Viewed from the AI production side
+first, you would need, at minimum:
+
+- A human-in-the-loop review queue: coders approve or correct the agent's
+  suggestions, nothing goes out the door autonomously
+- Observability beyond per-run JSON files: tracing, log aggregation, alerting
+- Regression evals in CI, so a prompt or model change cannot silently drop
+  the acceptance rate
+- State design for the resolver: memory of the attempt history (the evaluation
+  shows its absence directly causes an oscillation failure)
+- Cost and rate-limit budgets, idempotent retries, versioned prompts
+
+And from the healthcare domain side:
 
 - Real payer connectivity: X12 837/835/277 transactions through a
   clearinghouse, not a JSON mock
 - The licensed AMA CPT code set, payer-specific fee schedules, NCCI edits,
   and real coverage policies instead of a tiny illustrative subset
-- A human-in-the-loop review queue: coders approve or correct the agent's
-  suggestions, nothing goes out the door autonomously
 - Eligibility and benefits checks before the visit, not just adjudication after
 - HIPAA controls end to end (this demo needs none because it touches no real
   patient data, which was a deliberate design choice)
-- Auditability, retention, role-based access, rate limiting, retries, and
-  observability beyond per-run JSON files
 
 ## Licensing notes
 

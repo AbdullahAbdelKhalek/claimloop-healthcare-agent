@@ -1,6 +1,7 @@
 import React from "react";
 
 const money = (cents) => `$${(cents / 100).toFixed(2)}`;
+const DX_LETTERS = "ABCDEFGHIJKL";
 
 export function NoteCard({ stage }) {
   const n = stage.note;
@@ -61,7 +62,7 @@ export function CodingCard({ stage }) {
         <tbody>
           {c.diagnoses.map((d, i) => (
             <tr key={d.icd10_code + i}>
-              <td>{i + 1}</td>
+              <td>{DX_LETTERS[i] || i + 1}</td>
               <td><code>{d.icd10_code}</code></td>
               <td>{d.description}<div className="rationale">{d.rationale}</div></td>
               <td><Confidence value={d.confidence} /></td>
@@ -76,7 +77,7 @@ export function CodingCard({ stage }) {
             <tr key={p.cpt_code + i}>
               <td><code>{p.cpt_code}</code></td>
               <td>{p.description}<div className="rationale">{p.rationale}</div></td>
-              <td>{p.dx_pointers.join(", ")}</td>
+              <td>{p.dx_pointers.map((n) => DX_LETTERS[n - 1] || n).join(", ")}</td>
               <td><Confidence value={p.confidence} /></td>
             </tr>
           ))}
@@ -84,6 +85,74 @@ export function CodingCard({ stage }) {
       </table>
       {c.coding_notes && <p className="notes">{c.coding_notes}</p>}
     </section>
+  );
+}
+
+export function ClaimDocument({ claim }) {
+  const p = claim.patient;
+  return (
+    <div className="claim-doc">
+      <div className="claim-doc-head">
+        <span>Professional claim <strong>{claim.claim_id}</strong></span>
+        <span>
+          service date {claim.service_date} · submission {claim.attempt}
+          {claim.resubmission_of && <> · corrects <strong>{claim.resubmission_of}</strong></>}
+        </span>
+      </div>
+      <div className="claim-parties">
+        <div className="claim-party">
+          <p className="section-label">Patient</p>
+          <div>{p.first_name} {p.last_name}</div>
+          <div className="sub">
+            {p.gender}, born {p.date_of_birth} · member {p.member_id}
+          </div>
+        </div>
+        <div className="claim-party">
+          <p className="section-label">Billing provider</p>
+          <div>{claim.provider.name}</div>
+          <div className="sub">NPI {claim.provider.npi}</div>
+        </div>
+        <div className="claim-party">
+          <p className="section-label">Payer</p>
+          <div>{claim.payer_id}</div>
+          <div className="sub">simulated adjudication</div>
+        </div>
+      </div>
+      <div className="claim-dx">
+        <p className="section-label">Diagnoses</p>
+        {claim.diagnoses.map((d, i) => (
+          <span key={d.sequence} className="dx-item">
+            <span className="dx-letter">{DX_LETTERS[i] || d.sequence}</span>
+            <code>{d.icd10_code}</code>
+            <span>{d.description}</span>
+          </span>
+        ))}
+      </div>
+      <div className="claim-lines">
+        <table>
+          <thead>
+            <tr><th>#</th><th>CPT</th><th>service</th><th>units</th><th>dx</th><th>auth</th><th>charge</th></tr>
+          </thead>
+          <tbody>
+            {claim.service_lines.map((l) => (
+              <tr key={l.sequence}>
+                <td>{l.sequence}</td>
+                <td><code>{l.cpt_code}</code></td>
+                <td>{l.description}</td>
+                <td>{l.units}</td>
+                <td>{l.dx_pointers.map((n) => DX_LETTERS[n - 1] || n).join(", ")}</td>
+                <td>{l.prior_auth_number ? <span className="auth-num">{l.prior_auth_number}</span> : "-"}</td>
+                <td>{money(l.charge_cents)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div className="claim-total">
+        <span>total billed</span>
+        <strong>{money(claim.total_charge_cents)}</strong>
+      </div>
+    </div>
   );
 }
 
@@ -104,24 +173,17 @@ export function AttemptCard({ attempt }) {
   return (
     <section className={`panel card appear attempt ${accepted ? "ok" : adj ? "bad" : ""}`}>
       <header>
-        <h3>Attempt {attempt.attempt} <code>{claim.claim_id}</code></h3>
-        {adj && <span className={`stamp ${accepted ? "s-ok" : "s-bad"}`}>{adj.status.toUpperCase()}</span>}
+        <h3>Submission {attempt.attempt}</h3>
+        {adj && <span className={`stamp ${accepted ? "s-ok" : "s-bad"}`}>{adj.status}</span>}
       </header>
 
-      <div className="claim-line">
-        {claim.diagnoses.length} dx, {claim.service_lines.length} lines, billed{" "}
-        {money(claim.total_charge_cents)}
-        {accepted && <> , paid <strong>{money(adj.paid_total_cents)}</strong></>}
-        {claim.resubmission_of && <> , resubmission of <code>{claim.resubmission_of}</code></>}
-      </div>
+      <ClaimDocument claim={claim} />
 
-      <div className="chips">
-        {claim.service_lines.map((l) => (
-          <span key={l.sequence} className="line-chip">
-            {l.cpt_code}{l.prior_auth_number && <em> {l.prior_auth_number}</em>}
-          </span>
-        ))}
-      </div>
+      {accepted && (
+        <p className="claim-line" style={{ marginTop: 8 }}>
+          Paid <strong>{money(adj.paid_total_cents)}</strong> by the payer.
+        </p>
+      )}
 
       {adj && !accepted && (
         <>
@@ -171,14 +233,14 @@ export function FinalBanner({ final, usage, seconds }) {
   const ok = final.status === "accepted";
   return (
     <section className={`panel final appear ${ok ? "f-ok" : "f-bad"}`}>
-      <div className={`stamp big ${ok ? "s-ok" : "s-bad"}`}>{final.status.toUpperCase()}</div>
+      <span className={`stamp ${ok ? "s-ok" : "s-bad"}`}>{final.status}</span>
       <div className="final-body">
         <p>
           {final.first_pass_accepted
             ? "Clean claim on the first pass."
             : final.resolved_after_denial
-              ? `Denied, then recovered by the loop in ${final.attempts_used} attempts.`
-              : `Still ${final.status} after ${final.attempts_used} attempt(s).`}
+              ? `Denied, then recovered by the loop in ${final.attempts_used} submissions.`
+              : `Still ${final.status} after ${final.attempts_used} submission(s).`}
           {ok && <> Paid <strong>{money(final.paid_total_cents)}</strong>.</>}
         </p>
         <div className="stats">

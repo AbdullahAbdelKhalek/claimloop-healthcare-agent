@@ -8,6 +8,8 @@ async function json(resp) {
 
 export const getHealth = () => fetch("/api/health").then(json);
 export const getEncounters = () => fetch("/api/encounters").then(json);
+export const getEncounter = (id) =>
+  fetch(`/api/encounters/${encodeURIComponent(id)}`).then(json);
 export const getRun = (id) => fetch(`/api/runs/${id}`).then(json);
 
 export const startRun = (payload) =>
