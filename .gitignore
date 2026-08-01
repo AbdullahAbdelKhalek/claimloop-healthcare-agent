@@ -24,3 +24,6 @@ Thumbs.db
 
 # exported slide previews
 slides/qa/
+
+# local Overleaf upload bundle, regenerate with Compress-Archive
+report.zip
