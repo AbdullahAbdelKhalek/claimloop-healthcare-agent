@@ -1,0 +1,23 @@
+# environments and secrets
+.venv/
+.env
+
+# dataset files are never committed (course rule: do not redistribute the dataset)
+data/
+
+# run artifacts contain dataset text, so they stay local too
+runs/
+results/raw/
+
+# python
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# frontend
+node_modules/
+frontend/dist/
+
+# os noise
+.DS_Store
+Thumbs.db
