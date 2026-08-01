@@ -1,0 +1,53 @@
+{
+  "n_runs": 60,
+  "n_completed": 33,
+  "n_errors": 27,
+  "first_pass_acceptance_rate": 0.8182,
+  "final_acceptance_rate": 0.9394,
+  "resolved_after_denial": 4,
+  "denied_first_pass": 6,
+  "mean_attempts": 1.18,
+  "denials_by_carc_first_attempt": {
+    "50": 7,
+    "150": 1
+  },
+  "fixed_by_carc": {
+    "50": 5,
+    "150": 1
+  },
+  "appeals": {
+    "count": 2,
+    "overturned": 2
+  },
+  "abandoned": 1,
+  "note_rouge_f": {
+    "rouge1": 0.5438,
+    "rouge2": 0.2232,
+    "rougeL": 0.3152
+  },
+  "mean_stage_metrics": {
+    "scribe": {
+      "input": 1755.61,
+      "output": 765.09,
+      "seconds": 8.5
+    },
+    "coding": {
+      "input": 4420.61,
+      "output": 1026.61,
+      "seconds": 18.62
+    }
+  },
+  "mean_total_seconds": 34.74,
+  "mean_tokens_per_run": {
+    "input": 7973.03,
+    "output": 2052.39
+  },
+  "total_tokens": {
+    "input": 263110,
+    "output": 67729
+  },
+  "estimated_cost_usd": {
+    "total": 0.1339,
+    "mean_per_encounter": 0.0
+  }
+}

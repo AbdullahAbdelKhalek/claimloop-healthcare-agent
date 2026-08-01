@@ -8,6 +8,7 @@ stub out, which keeps runs reproducible. These are environment stubs, not
 synthetic study data, and the report discloses them.
 """
 
+import re
 import zlib
 
 from . import config
@@ -22,9 +23,24 @@ def _crc(seed: str) -> int:
     return zlib.crc32(seed.encode("utf-8"))
 
 
+def parse_age(raw) -> int:
+    """ACI-Bench ages arrive as '58', '45.0', or '22-month'. Be liberal."""
+    s = str(raw if raw is not None else "").strip().lower()
+    if not s or s == "nan":
+        return 45
+    if "month" in s:
+        m = re.search(r"\d+", s)
+        months = int(m.group()) if m else 12
+        return months // 12
+    try:
+        return max(0, int(float(s)))
+    except ValueError:
+        return 45
+
+
 def build_patient(encounter_id: str, meta: dict) -> Patient:
     crc = _crc(encounter_id)
-    age = int(meta.get("patient_age") or 45)
+    age = parse_age(meta.get("patient_age"))
     service_year = int(config.SERVICE_DATE.split("-")[0])
     dob_year = service_year - age
     dob_month = crc % 12 + 1

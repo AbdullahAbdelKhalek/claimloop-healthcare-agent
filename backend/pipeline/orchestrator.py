@@ -11,11 +11,18 @@ stage artifacts) so a UI can show the agents working live. Without emit, the
 agents run in plain mode, which is what the batch evaluation uses.
 """
 
+import asyncio
 import json
 import time
 import uuid
 
+import openai
 from agents import Runner
+
+# API failures worth retrying; anything else is a real bug and should surface.
+TRANSIENT_ERRORS = (openai.RateLimitError, openai.APIConnectionError,
+                    openai.APITimeoutError, openai.InternalServerError)
+MAX_API_RETRIES = 3
 
 from . import config
 from .agents import (
@@ -46,7 +53,22 @@ def _save(record: dict) -> None:
 
 
 async def _run_agent(agent, input_text: str, stage: str, emit):
-    """Run one agent, streaming events through emit when it is provided."""
+    """Run one agent, streaming events through emit when it is provided.
+    Transient API failures are retried with backoff."""
+    for attempt in range(MAX_API_RETRIES + 1):
+        try:
+            return await _run_agent_once(agent, input_text, stage, emit)
+        except TRANSIENT_ERRORS as exc:
+            if attempt == MAX_API_RETRIES:
+                raise
+            delay = 5 * (attempt + 1) ** 2
+            if emit:
+                emit({"type": "retry", "stage": stage,
+                      "message": f"{type(exc).__name__}, retrying in {delay}s"})
+            await asyncio.sleep(delay)
+
+
+async def _run_agent_once(agent, input_text: str, stage: str, emit):
     if emit is None:
         result = await Runner.run(agent, input_text)
         return result.final_output, _usage_of(result)

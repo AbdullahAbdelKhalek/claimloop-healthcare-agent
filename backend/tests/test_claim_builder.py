@@ -45,3 +45,14 @@ def test_deterministic_demographics():
     b = build_claim("D2N068", {"patient_age": 58}, coding(), 1)
     assert a.patient.member_id == b.patient.member_id
     assert a.patient.date_of_birth == b.patient.date_of_birth
+
+
+def test_age_formats_from_aci_bench():
+    from backend.pipeline.demographics import parse_age
+    assert parse_age("58") == 58
+    assert parse_age("45.0") == 45
+    assert parse_age("22-month") == 1
+    assert parse_age("9-month") == 0
+    assert parse_age("nan") == 45
+    assert parse_age(None) == 45
+    assert parse_age(61.0) == 61

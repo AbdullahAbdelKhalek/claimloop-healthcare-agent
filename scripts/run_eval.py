@@ -146,7 +146,7 @@ def write_summary_md(summary: dict, cfg: dict) -> str:
         "# ClaimLoop evaluation summary",
         "",
         f"Splits: {cfg['splits']}, encounters: {summary['n_runs']}, "
-        f"model profile: {cfg['model_profile']} ({cfg['models']}), "
+        f"profile: {cfg['profile']} ({cfg['models']}), "
         f"reasoning effort: {cfg['reasoning_effort']}",
         "",
         "## Workflow outcomes",
@@ -196,6 +196,10 @@ def main() -> int:
     parser.add_argument("--profile", default=config.DEFAULT_PROFILE,
                         choices=sorted(config.PROFILES), help="per-stage model profile")
     parser.add_argument("--concurrency", type=int, default=4)
+    parser.add_argument("--resume", action="store_true",
+                        help="keep completed records in results raw, rerun the rest")
+    parser.add_argument("--from-raw", action="store_true",
+                        help="rebuild summaries from existing raw records, no API calls")
     args = parser.parse_args()
 
     splits = [s.strip() for s in args.splits.split(",") if s.strip()]
@@ -217,10 +221,29 @@ def main() -> int:
         "service_date": config.SERVICE_DATE,
         "started_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
     }
-    print(f"Evaluating {len(encounters)} encounters from {splits} "
-          f"with the {args.profile} profile {cfg['models']}...")
+    existing: dict[str, tuple[Path, dict]] = {}
+    for f in raw_dir.glob("*.json"):
+        r = json.loads(f.read_text(encoding="utf-8"))
+        existing[r["encounter_id"]] = (f, r)
 
-    records = asyncio.run(run_batch(encounters, args.profile, args.concurrency, raw_dir))
+    if args.from_raw:
+        records = [r for _, r in existing.values()]
+        print(f"Rebuilding summaries from {len(records)} raw records, no API calls.")
+    elif args.resume:
+        done_ids = {eid for eid, (_, r) in existing.items() if r["status"] == "done"}
+        for eid, (f, r) in existing.items():
+            if r["status"] != "done":
+                f.unlink()
+        todo = [e for e in encounters if e["encounter_id"] not in done_ids]
+        print(f"Resuming: {len(done_ids)} kept, {len(todo)} to run "
+              f"with the {args.profile} profile {cfg['models']}...")
+        new_records = asyncio.run(run_batch(todo, args.profile, args.concurrency, raw_dir))
+        records = [r for _, r in existing.values() if r["status"] == "done"] + new_records
+    else:
+        print(f"Evaluating {len(encounters)} encounters from {splits} "
+              f"with the {args.profile} profile {cfg['models']}...")
+        records = asyncio.run(run_batch(encounters, args.profile, args.concurrency, raw_dir))
+
     summary = aggregate(records)
 
     (out_dir / "eval_config.json").write_text(json.dumps(cfg, indent=2), encoding="utf-8")

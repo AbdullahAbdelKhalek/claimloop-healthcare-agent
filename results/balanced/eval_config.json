@@ -1,0 +1,38 @@
+{
+  "splits": [
+    "valid"
+  ],
+  "limit": 0,
+  "n_encounters": 20,
+  "encounter_ids": [
+    "D2N068",
+    "D2N069",
+    "D2N070",
+    "D2N071",
+    "D2N072",
+    "D2N073",
+    "D2N074",
+    "D2N075",
+    "D2N076",
+    "D2N077",
+    "D2N078",
+    "D2N079",
+    "D2N080",
+    "D2N081",
+    "D2N082",
+    "D2N083",
+    "D2N084",
+    "D2N085",
+    "D2N086",
+    "D2N087"
+  ],
+  "profile": "balanced",
+  "models": {
+    "scribe": "gpt-5.6-luna",
+    "coder": "gpt-5.6-terra",
+    "resolver": "gpt-5.6-terra"
+  },
+  "reasoning_effort": "medium",
+  "service_date": "2026-05-15",
+  "started_at": "2026-08-01T09:58:21"
+}
