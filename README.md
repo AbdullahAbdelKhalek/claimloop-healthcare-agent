@@ -118,49 +118,133 @@ sequenceDiagram
 - The resolution agent can call a mock prior authorization portal, correct
   codes, downcode visits, write an appeal letter, or give up.
 
+## Where things live
+
+There is no single `main.py`; the project has four entry points, in the order
+you would use them:
+
+| Entry point | What it does | Needs an API key |
+| --- | --- | --- |
+| `scripts/fetch_data.py` | downloads the ACI-Bench corpus into `data/` | no |
+| `backend/app.py` | the web app, served with uvicorn | yes |
+| `scripts/smoke.py` | one encounter end to end, prints a summary | yes |
+| `scripts/run_eval.py` | the full batch evaluation and its figures | yes |
+
+The pipeline itself reads top to bottom in
+`backend/pipeline/orchestrator.py`, which is the single best file to start
+from if you want to understand the system.
+
 ## Quickstart
 
+Prerequisites: Python 3.11 or newer, Node 18 or newer, and an OpenAI API key
+with access to the gpt-5.6 family.
+
+<details open>
+<summary><b>macOS and Linux</b></summary>
+
+```bash
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+cp .env.example .env                      # then paste your key into .env
+.venv/bin/python scripts/fetch_data.py
+(cd frontend && npm install && npm run build)
+.venv/bin/python -m uvicorn backend.app:app --port 8000
 ```
+</details>
+
+<details open>
+<summary><b>Windows (PowerShell)</b></summary>
+
+```powershell
 python -m venv .venv
 .venv\Scripts\pip install -r requirements.txt
-copy .env.example .env        (then put your OpenAI API key in .env)
+Copy-Item .env.example .env               # then paste your key into .env
 .venv\Scripts\python scripts\fetch_data.py
-cd frontend && npm install && npm run build && cd ..
+cd frontend; npm install; npm run build; cd ..
 .venv\Scripts\python -m uvicorn backend.app:app --port 8000
 ```
+</details>
 
 Open http://localhost:8000, pick an encounter, and watch the claim journey:
 the left side is a live agent console (streaming output, tool calls against
 the NLM code table and the payer's auth portal, stage progress), the right
-side fills with the artifacts (note, codes, claim JSON, adjudication with
+side fills with the artifacts (note, codes, claim document, adjudication with
 CARC chips, resolver decisions, appeal letters). The "mock playback" button
 replays a scripted run through the real claim builder and payer without
-spending tokens, useful for previewing the UI.
+spending tokens, useful for previewing the UI or demoing offline.
 
-Run the tests (offline, no API key needed):
+The health badges at the top right tell you whether the key and the data were
+found, so a misconfigured setup is visible immediately rather than failing
+mid-run.
 
-```
-.venv\Scripts\python -m pytest backend/tests -q
-```
+Run the tests, which need neither an API key nor the dataset:
 
-Run a single-encounter smoke test, then the evaluation batch:
-
-```
-.venv\Scripts\python scripts\smoke.py --profile budget
-.venv\Scripts\python scripts\run_eval.py --splits valid,test1 --profile budget --concurrency 4
+```bash
+.venv/bin/python -m pytest backend/tests -q      # 15 tests, all offline
 ```
 
-Each profile writes to its own results/<profile>/ directory so tiers can be
-compared side by side.
+## Reproducing the evaluation
+
+```bash
+.venv/bin/python scripts/smoke.py --profile budget
+.venv/bin/python scripts/run_eval.py --splits valid,test1 --profile budget --concurrency 4
+.venv/bin/python scripts/run_eval.py --splits valid --profile balanced --concurrency 4
+.venv/bin/python scripts/compare_profiles.py
+```
+
+That is exactly what produced the numbers in this README and the report. The
+budget batch is 60 encounters and costs about $0.23; the balanced batch is 20
+encounters and costs about $0.43. Each profile writes to its own
+`results/<profile>/` directory, so tiers can be compared side by side, and
+`scripts/compare_profiles.py` writes `results/comparison.md`.
+
+Useful flags: `--limit N` caps the encounter count for a cheap trial run,
+`--resume` reruns only the encounters that failed or are missing, and
+`--from-raw` rebuilds the summaries and figures from records already on disk
+without spending a single token.
+
+**What reproduces exactly, and what does not.** The deterministic half is
+fully reproducible: the dataset is pinned to a commit hash, the payer is a
+rules engine with no randomness, patient identifiers are derived
+deterministically from the encounter id, and the service date is fixed. Given
+the same codes, you will get byte-identical claims and verdicts. The agent
+half is not: LLM sampling means your notes and code choices will differ from
+mine, so your acceptance rates will land near but not exactly on 83.3 and
+96.7 percent. This is a property of the system under study, not a defect in
+the harness. Every run writes its full configuration to
+`results/<profile>/eval_config.json`, including the exact encounter ids, so
+any run can be described precisely even though it cannot be replayed
+bit for bit.
 
 ## Data
 
 Encounters come from ACI-Bench (Yim et al., Scientific Data 2023), a public
 CC BY 4.0 benchmark of simulated doctor-patient conversations written with
 clinician input, distributed through Microsoft's
-clinical_visit_note_summarization_corpus repository. `scripts/fetch_data.py`
-downloads it at a pinned commit. Per course rules the data itself is never
-committed to this repository, and no real patient data is involved anywhere.
+clinical_visit_note_summarization_corpus repository.
+
+**You do not need to find the data yourself, and you do not need an account
+or credentials for it.** Run this once after installing dependencies:
+
+```bash
+.venv/bin/python scripts/fetch_data.py
+```
+
+The script downloads ten CSV files straight from the public GitHub raw
+endpoint at a pinned commit hash, creates `data/aci-bench/challenge_data/`
+for you, prints the row count of every split so you can confirm the download
+matched (train 67, valid 20, test1 40, test2 40, test3 40), and writes
+`data/DATA_LICENSE.txt` recording the license and citation. Re-running it is
+safe: files already on disk are skipped. If you are ever unsure whether the
+data is in place, the app's health badge says "data ready" or tells you to
+run the script.
+
+The pinned commit is `293e4549` in `scripts/fetch_data.py`. Pinning matters
+for replication: even if the upstream repository changes later, everyone who
+runs this gets byte-identical inputs.
+
+Per course rules the data itself is never committed to this repository
+(`data/` is gitignored), and no real patient data is involved anywhere.
 
 Identifiers a claim needs but the dataset does not provide (member IDs, dates
 of birth, the provider) are deterministic placeholder stubs derived from the
@@ -225,9 +309,18 @@ And from the healthcare domain side:
 - HIPAA controls end to end (this demo needs none because it touches no real
   patient data, which was a deliberate design choice)
 
-## Licensing notes
+## Copyright and reuse
 
-- Code: MIT
+Copyright (c) 2026 Abdullah Abdel-Khalek. All rights reserved.
+
+This repository is published so it can be read, reviewed, and discussed. It
+carries no open-source license, which under default copyright means no
+permission is granted to copy, modify, redistribute, or use this code,
+commercially or otherwise. Reading it, and forking it within GitHub as that
+platform's terms allow, is fine. If you want to use any of it, ask me first.
+
+Other rights that are not mine to grant:
+
 - ACI-Bench data: CC BY 4.0, fetched at setup, never redistributed here
 - CPT is copyrighted by the American Medical Association. This repository
   contains only a small set of code numbers with paraphrased plain-language
