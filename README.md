@@ -1,4 +1,4 @@
-# ClaimLoop
+# ClaimLoop: a healthcare claims agent that fights its own denials
 
 An end-to-end teaching demo of the outpatient medical claims lifecycle, run by
 LLM agents: a live conversation between a patient and their provider goes in,
@@ -31,16 +31,51 @@ The interesting question is not "can a model emit codes" but "can an
 instrumented pipeline recover when the payer says no". ClaimLoop makes that
 loop observable and measurable.
 
-## The pipeline
+## Architecture
 
+```mermaid
+flowchart LR
+    T[Encounter transcript<br/>ACI-Bench] --> S[Scribe agent<br/>structured visit note]
+    S --> C[Coder agent<br/>ICD-10-CM + CPT]
+    C <-->|verify every code| NLM[(NLM ICD-10-CM<br/>code table)]
+    C --> B[Claim builder<br/>deterministic code]
+    B --> P{Mock payer<br/>rules adjudication}
+    P -->|accepted| PAID([paid])
+    P -->|denied with CARC/RARC| R[Denial resolver agent]
+    R <-->|request_prior_auth| PA[(Payer auth portal)]
+    R -->|fix and resubmit<br/>max 3 submissions| B
+    R -->|appeal letter| P
+    R -->|abandon| U([unpaid])
 ```
-transcript -> [1 Scribe agent] -> visit note
-           -> [2 Coder agent + live ICD-10-CM lookup] -> codes
-           -> [3 Claim builder (plain code)] -> FHIR-shaped claim
-           -> [4 Mock payer (deterministic rules)] -> accepted or CARC/RARC denial
-           -> [5 Denial resolution agent] -> fix and resubmit, prior auth, appeal, or abandon
-                 and back to 4, at most three submissions
+
+Agents are the rounded process boxes; cylinders are the tools they call;
+the payer is plain rules code. The same architecture appears as
+`report/figures/workflow.png` in the report and slide deck.
+
+### How a denial gets fought
+
+The most common recovery pattern from the evaluation, as a sequence:
+
+```mermaid
+sequenceDiagram
+    participant C as Coder agent
+    participant N as NLM code table
+    participant B as Claim builder
+    participant P as Mock payer
+    participant R as Denial resolver
+    participant A as Auth portal
+    C->>N: search_icd10("knee pain")
+    N-->>C: M25.561 verified
+    B->>P: submission 1 (99214 + 73721 MRI)
+    P-->>R: denied CO-197, authorization absent
+    R->>A: request_prior_auth(73721, [M25.561])
+    A-->>R: approved, auth number issued
+    R->>B: attach auth number, resubmit
+    B->>P: submission 2
+    P-->>B: accepted, paid
 ```
+
+### Implementation notes
 
 - Agents run on the OpenAI Agents SDK over the Responses API, in streamed
   mode when the UI is watching. Orchestration is a plain Python loop in
