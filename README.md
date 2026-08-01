@@ -49,8 +49,23 @@ flowchart LR
 ```
 
 Agents are the rounded process boxes; cylinders are the tools they call;
-the payer is plain rules code. The same architecture appears as
+the payer is plain rules code. The same flow appears as
 `report/figures/workflow.png` in the report and slide deck.
+
+### How it is built
+
+The flow above says what moves. This says what is built, and where the model
+calls actually live:
+
+![Layered architecture](report/figures/architecture.png)
+
+Two things this makes explicit. Only the agents layer contains model calls,
+so the claim builder and payer verdicts are reproducible code, which is what
+makes denial recovery attributable to the agent rather than to a stochastic
+adjudicator. And tools are granted per agent, not globally: the scribe holds
+no tools and so cannot reach outside its transcript, while only the resolver
+can request prior authorization. The guarantees are enforced by structured
+output types and tool grants, not by prompt wording.
 
 ### How a denial gets fought
 

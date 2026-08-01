@@ -239,6 +239,43 @@ evaluated for schema validity, verifiability, and payer acceptance, not for
 audit-grade accuracy. This boundary is stated because it is exactly where a
 production system would insert human review.
 
+\subsection{System architecture}
+Figure~\ref{fig:architecture} shows how the pipeline is actually built.
+Responsibilities are separated into six layers so that the boundary between
+model-driven and deterministic behaviour is explicit and auditable.
+
+Each agent is declared with a strict structured output type, so the SDK
+constrains generation to a schema and the orchestrator never parses free
+text: the scribe emits \texttt{EncounterNote}, the coder
+\texttt{CodingResult}, and the resolver \texttt{ResolutionDecision}. Tools
+are attached per agent rather than globally, which is what makes the
+verification guarantee enforceable: only the coder and the resolver hold
+\texttt{search\_icd10}, and only the resolver holds
+\texttt{request\_prior\_auth}. The scribe holds no tools at all, so it
+cannot reach outside the transcript it was given.
+
+Two design decisions in this layering are worth stating because they run
+against the common pattern in agent frameworks. First, there are no agent
+handoffs: the workflow order is fixed, so control flow is a plain
+asynchronous loop that a reader can follow top to bottom, and the agents are
+reduced to well-scoped language operations. Second, the claim builder and
+the payer are deliberately kept out of the model path entirely. Every model
+call is streamed through \texttt{Runner.run\_streamed()}, and the resulting
+token, tool-call, and item events are forwarded verbatim over Server-Sent
+Events, which is what allows the interface to expose the agent's reasoning
+and tool use as it happens rather than after the fact.
+
+\begin{figure*}
+  \centering
+  \includegraphics[width=0.92\textwidth]{figures/architecture.png}
+  \caption{Layered architecture. Only the agents layer contains model calls;
+  the claim builder and payer are ordinary code, which is what makes denial
+  recovery attributable to the agent rather than to a stochastic adjudicator.
+  Structured output types and per-agent tool grants are the enforcement
+  mechanism for the coding-verification and no-fabrication guarantees.}
+  \label{fig:architecture}
+\end{figure*}
+
 \subsection{Implementation and reproducibility}
 The pipeline is roughly two thousand lines of Python and JavaScript: a
 FastAPI backend, three agents on the OpenAI Agents SDK (gpt-5.6 family
