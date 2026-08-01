@@ -297,9 +297,9 @@ export default function App() {
 
       <footer>
         Built by Abdullah Abdel-Khalek to study how agent workflows can help
-        patients get timely care and help providers spend less on the claims
-        grind. Simulated payer, public simulated dataset, no real patient data.
-        Not medical or billing advice.
+        patients get timely care and providers spend less on the claims grind.
+        Simulated payer, public dataset, no real patient data. Not medical or
+        billing advice.
       </footer>
     </div>
   );
