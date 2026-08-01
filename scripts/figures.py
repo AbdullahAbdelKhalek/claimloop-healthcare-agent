@@ -82,54 +82,91 @@ def _tokens(summary: dict, path: Path) -> None:
 
 
 def make_workflow_figure(path: Path) -> None:
-    """The methodology figure for the report: the five pipeline stages."""
+    """The methodology figure for the report: the five pipeline stages.
+
+    Layout is deliberately orthogonal: the loop edges are straight vertical
+    drops so no arrow ever crosses a box. The denial resolver sits directly
+    beneath the claim builder and the payer, which are the two stages it
+    connects, so the loop reads without any curved routing.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
-    fig, ax = plt.subplots(figsize=(10, 3.6))
+
+    AGENT_FILL = "#E7EEF7"
+    CODE_FILL = "#EEEDE8"
+    INPUT_FILL = "#FFFFFF"
+    RESOLVER_FILL = "#F7F1E3"
+    EDGE = "#B9B5AC"
+
+    fig, ax = plt.subplots(figsize=(10, 3.9))
     ax.axis("off")
-
-    boxes = [
-        ("Transcript", "ACI-Bench\nencounter dialogue", "#e0e7ff"),
-        ("1. Scribe agent", "structured\nvisit note", "#dbeafe"),
-        ("2. Coder agent", "ICD-10-CM + CPT\nNLM code lookup tool", "#dbeafe"),
-        ("3. Claim builder", "FHIR-shaped claim\n(deterministic)", "#dcfce7"),
-        ("4. Mock payer", "rules engine\nCARC/RARC denials", "#dcfce7"),
-    ]
-    w, h, gap, y = 0.16, 0.42, 0.045, 0.42
-    for i, (title, sub, color) in enumerate(boxes):
-        x = 0.02 + i * (w + gap)
-        ax.add_patch(plt.Rectangle((x, y), w, h, facecolor=color, edgecolor=INK, lw=1.2))
-        ax.text(x + w / 2, y + h - 0.10, title, ha="center", va="center",
-                fontsize=10, fontweight="bold", color=INK)
-        ax.text(x + w / 2, y + h / 2 - 0.07, sub, ha="center", va="center", fontsize=8.5, color=INK)
-        if i < len(boxes) - 1:
-            ax.annotate("", xy=(x + w + gap - 0.005, y + h / 2), xytext=(x + w + 0.005, y + h / 2),
-                        arrowprops=dict(arrowstyle="->", color=INK, lw=1.4))
-
-    # denial loop back edge
-    x_payer = 0.02 + 4 * (w + gap) + w / 2
-    bx = 0.02 + 2.5 * (w + gap) - w / 2 - 0.04
-    bw = w + 0.14
-    bcx = bx + bw / 2
-    ax.add_patch(plt.Rectangle((bx, 0.04), bw, 0.24,
-                               facecolor="#fef3c7", edgecolor=INK, lw=1.2))
-    ax.text(bcx, 0.21, "5. Denial resolution agent", ha="center", va="center",
-            fontsize=9.5, fontweight="bold", color=INK)
-    ax.text(bcx, 0.11, "fix and resubmit, prior auth tool,\nappeal letter, or abandon",
-            ha="center", va="center", fontsize=8.5, color=INK)
-    ax.annotate("", xy=(bx + bw, 0.16), xytext=(x_payer, y),
-                arrowprops=dict(arrowstyle="->", color=BAD, lw=1.4,
-                                connectionstyle="arc3,rad=0.25"))
-    ax.text(x_payer - 0.05, 0.32, "denied", fontsize=9, color=BAD)
-    ax.annotate("", xy=(0.02 + 3 * (w + gap) + w / 2, y), xytext=(bx, 0.16),
-                arrowprops=dict(arrowstyle="->", color=ACCENT, lw=1.4,
-                                connectionstyle="arc3,rad=0.25"))
-    ax.text(bx - 0.02, 0.32, "resubmit", fontsize=9, color=ACCENT, ha="right")
-    ax.text(x_payer, y + h + 0.05, "accepted: paid", fontsize=9, color=GOOD, ha="center")
-
     ax.set_xlim(0, 1)
     ax.set_ylim(0, 1)
-    fig.tight_layout()
-    fig.savefig(path, dpi=220, bbox_inches="tight")
+
+    boxes = [
+        ("Encounter transcript", "patient and provider\ndialogue (ACI-Bench)", INPUT_FILL, "input"),
+        ("1. Scribe agent", "structured\nvisit note", AGENT_FILL, "agent"),
+        ("2. Coder agent", "ICD-10-CM + CPT,\nevery code tool-verified", AGENT_FILL, "agent"),
+        ("3. Claim builder", "professional claim\nassembly", CODE_FILL, "code"),
+        ("4. Mock payer", "rules adjudication,\nCARC / RARC denials", CODE_FILL, "code"),
+    ]
+    w, h, gap = 0.172, 0.40, 0.030
+    y = 0.46
+    centers = []
+    for i, (title, sub, fill, kind) in enumerate(boxes):
+        x = 0.01 + i * (w + gap)
+        cx = x + w / 2
+        centers.append(cx)
+        ax.add_patch(plt.Rectangle((x, y), w, h, facecolor=fill, edgecolor=EDGE, lw=1.0))
+        if kind in ("agent", "code"):
+            ax.text(x + 0.012, y + h - 0.055, kind.upper(), fontsize=6.5,
+                    fontweight="bold", color=ACCENT if kind == "agent" else "#8A9099",
+                    ha="left", va="center")
+        ax.text(cx, y + h - 0.135, title, ha="center", va="center",
+                fontsize=10, fontweight="bold", color=INK)
+        ax.text(cx, y + 0.10, sub, ha="center", va="center", fontsize=8.5, color="#57606A")
+        if i < len(boxes) - 1:
+            ax.annotate("", xy=(x + w + gap, y + h / 2), xytext=(x + w, y + h / 2),
+                        arrowprops=dict(arrowstyle="-|>", color=INK, lw=1.1,
+                                        shrinkA=0, shrinkB=0, mutation_scale=11))
+
+    x_claim, x_payer = centers[3], centers[4]
+
+    # denial resolver, spanning beneath the two stages it connects
+    rx0, rx1 = x_claim - w / 2 - 0.035, 0.99
+    ry0, ry1 = 0.05, 0.29
+    ax.add_patch(plt.Rectangle((rx0, ry0), rx1 - rx0, ry1 - ry0,
+                               facecolor=RESOLVER_FILL, edgecolor=EDGE, lw=1.0))
+    rcx = (rx0 + rx1) / 2
+    ax.text(rx0 + 0.012, ry1 - 0.045, "AGENT", fontsize=6.5, fontweight="bold",
+            color=ACCENT, ha="left", va="center")
+    ax.text(rcx, ry1 - 0.085, "5. Denial resolution agent", ha="center", va="center",
+            fontsize=10, fontweight="bold", color=INK)
+    ax.text(rcx, ry0 + 0.075, "fix and resubmit  ·  request prior authorization\n"
+                              "write an appeal  ·  abandon",
+            ha="center", va="center", fontsize=8.5, color="#57606A")
+
+    # loop edges: two straight vertical drops, no crossings
+    ax.annotate("", xy=(x_payer, ry1), xytext=(x_payer, y),
+                arrowprops=dict(arrowstyle="-|>", color=BAD, lw=1.3,
+                                shrinkA=0, shrinkB=0, mutation_scale=12))
+    ax.text(x_payer + 0.014, (y + ry1) / 2, "denied", fontsize=8.5, color=BAD,
+            ha="left", va="center")
+    ax.annotate("", xy=(x_claim, y), xytext=(x_claim, ry1),
+                arrowprops=dict(arrowstyle="-|>", color=ACCENT, lw=1.3,
+                                shrinkA=0, shrinkB=0, mutation_scale=12))
+    ax.text(x_claim - 0.014, (y + ry1) / 2, "resubmit", fontsize=8.5, color=ACCENT,
+            ha="right", va="center")
+    ax.text(rcx, ry0 - 0.035, "at most three submissions per encounter",
+            fontsize=8, color="#8A9099", ha="center", va="center", style="italic")
+
+    # accepted exit
+    ax.annotate("", xy=(x_payer, y + h + 0.075), xytext=(x_payer, y + h),
+                arrowprops=dict(arrowstyle="-|>", color=GOOD, lw=1.3,
+                                shrinkA=0, shrinkB=0, mutation_scale=12))
+    ax.text(x_payer, y + h + 0.105, "accepted: paid", fontsize=8.5, color=GOOD,
+            ha="center", va="bottom", fontweight="bold")
+
+    fig.savefig(path, dpi=220, bbox_inches="tight", facecolor="white")
     plt.close(fig)
 
 
