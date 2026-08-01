@@ -107,22 +107,24 @@ def make_workflow_figure(path: Path) -> None:
 
     # denial loop back edge
     x_payer = 0.02 + 4 * (w + gap) + w / 2
-    x_res = 0.02 + 2.5 * (w + gap)
-    ax.add_patch(plt.Rectangle((x_res - w / 2, 0.04), w + 0.06, 0.24,
+    bx = 0.02 + 2.5 * (w + gap) - w / 2 - 0.04
+    bw = w + 0.14
+    bcx = bx + bw / 2
+    ax.add_patch(plt.Rectangle((bx, 0.04), bw, 0.24,
                                facecolor="#fef3c7", edgecolor=INK, lw=1.2))
-    ax.text(x_res + 0.03, 0.21, "5. Denial resolution agent", ha="center", va="center",
-            fontsize=10, fontweight="bold", color=INK)
-    ax.text(x_res + 0.03, 0.11, "fix and resubmit, prior auth tool,\nappeal letter, or abandon",
+    ax.text(bcx, 0.21, "5. Denial resolution agent", ha="center", va="center",
+            fontsize=9.5, fontweight="bold", color=INK)
+    ax.text(bcx, 0.11, "fix and resubmit, prior auth tool,\nappeal letter, or abandon",
             ha="center", va="center", fontsize=8.5, color=INK)
-    ax.annotate("", xy=(x_res + w / 2 + 0.06, 0.16), xytext=(x_payer, y),
+    ax.annotate("", xy=(bx + bw, 0.16), xytext=(x_payer, y),
                 arrowprops=dict(arrowstyle="->", color=BAD, lw=1.4,
                                 connectionstyle="arc3,rad=0.25"))
-    ax.text(x_payer - 0.035, 0.30, "denied", fontsize=9, color=BAD)
-    ax.annotate("", xy=(0.02 + 3 * (w + gap) + w / 2, y), xytext=(x_res - 0.04, 0.16),
+    ax.text(x_payer - 0.05, 0.32, "denied", fontsize=9, color=BAD)
+    ax.annotate("", xy=(0.02 + 3 * (w + gap) + w / 2, y), xytext=(bx, 0.16),
                 arrowprops=dict(arrowstyle="->", color=ACCENT, lw=1.4,
                                 connectionstyle="arc3,rad=0.25"))
-    ax.text(x_res - 0.10, 0.30, "resubmit", fontsize=9, color=ACCENT)
-    ax.text(x_payer + 0.05, y + h / 2, "accepted:\npaid", fontsize=9, color=GOOD, va="center")
+    ax.text(bx - 0.02, 0.32, "resubmit", fontsize=9, color=ACCENT, ha="right")
+    ax.text(x_payer, y + h + 0.05, "accepted: paid", fontsize=9, color=GOOD, ha="center")
 
     ax.set_xlim(0, 1)
     ax.set_ylim(0, 1)

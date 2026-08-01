@@ -21,3 +21,6 @@ frontend/dist/
 # os noise
 .DS_Store
 Thumbs.db
+
+# exported slide previews
+slides/qa/
