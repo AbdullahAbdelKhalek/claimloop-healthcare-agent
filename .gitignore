@@ -27,3 +27,9 @@ slides/qa/
 
 # local Overleaf upload bundle, regenerate with Compress-Archive
 report.zip
+
+# presentation narration and the demo video toolchain stay local only
+slides/speaker-script.md
+demo-video/
+*.mp4
+*.webm
